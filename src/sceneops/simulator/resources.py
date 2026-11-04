@@ -1,5 +1,5 @@
-
 from enum import Enum
+from typing import ClassVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,11 +36,11 @@ class AllocationResult(BaseModel):
 class ResourceManager:
     """Manages ambulance availability and patient assignments."""
 
-    PRIORITY = {
-        TriageCategory.RED: 0,
-        TriageCategory.YELLOW: 1,
-        TriageCategory.GREEN: 2,
-    }
+    PRIORITY: ClassVar[dict[TriageCategory, int]] = {
+    TriageCategory.RED: 0,
+    TriageCategory.YELLOW: 1,
+    TriageCategory.GREEN: 2,
+}
 
     def __init__(self, ambulances: list[Ambulance]) -> None:
         ambulance_ids = [ambulance.ambulance_id for ambulance in ambulances]
