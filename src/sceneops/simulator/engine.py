@@ -1,4 +1,3 @@
-
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
@@ -13,6 +12,10 @@ from sceneops.simulator.resources import (
     AllocationResult,
     Ambulance,
     ResourceManager,
+)
+from sceneops.simulator.transport import (
+    TransportManager,
+    TransportRecord,
 )
 from sceneops.simulator.triage import (
     TriageResult,
@@ -54,6 +57,7 @@ class SimulationEngine:
         self.status = SimulationStatus.CREATED
         self.clock = clock or SimulationClock()
         self.resource_manager = ResourceManager(ambulances)
+        self.transport_manager = TransportManager(self.resource_manager)
 
         self.deterioration_manager = DeteriorationManager(
             deterioration_events or []
@@ -215,12 +219,59 @@ class SimulationEngine:
 
         return result
 
+    def start_transport(
+        self,
+        patient_id: str,
+        travel_duration_seconds: int,
+    ) -> TransportRecord:
+        """Start transport for an allocated patient."""
+
+        if self.status != SimulationStatus.RUNNING:
+            raise RuntimeError(
+                "Transport requires a running simulation."
+            )
+
+        allocation = self.allocations.get(patient_id)
+
+        if allocation is None:
+            raise ValueError(
+                f"Patient {patient_id} has no active ambulance allocation."
+            )
+
+        record = self.transport_manager.start_transport(
+            allocation=allocation,
+            current_time_seconds=self.clock.snapshot().elapsed_seconds,
+            travel_duration_seconds=travel_duration_seconds,
+        )
+
+        self._record_event(
+            event_type="transport_started",
+            description=(
+                f"Transport {record.transport_id} started for "
+                f"{patient_id} using ambulance {record.ambulance_id}."
+            ),
+            patient_id=patient_id,
+        )
+
+        return record
+
     def release_ambulance(self, ambulance_id: str) -> str:
-        """Release an ambulance and mark its patient as transported."""
+        """Manually release an ambulance that is not transporting a patient."""
 
         if self.status != SimulationStatus.RUNNING:
             raise RuntimeError(
                 "Ambulance release requires a running simulation."
+            )
+
+        active_transport = any(
+            record.ambulance_id == ambulance_id
+            and record.status.value == "in_progress"
+            for record in self.transport_manager.transports.values()
+        )
+
+        if active_transport:
+            raise ValueError(
+                "Cannot manually release an ambulance during transport."
             )
 
         patient_id = self.resource_manager.release_ambulance(
@@ -228,11 +279,10 @@ class SimulationEngine:
         )
 
         self.allocations.pop(patient_id, None)
-        self.transported_patients.add(patient_id)
 
         self._record_event(
             event_type="ambulance_released",
-            description=f"Ambulance {ambulance_id} released.",
+            description=f"Ambulance {ambulance_id} manually released.",
             patient_id=patient_id,
         )
 
@@ -250,6 +300,22 @@ class SimulationEngine:
             )
 
         snapshot = self.clock.advance(seconds)
+        completed_transports = self.transport_manager.advance_time(
+            snapshot.elapsed_seconds
+        )
+
+        for transport in completed_transports:
+            self.allocations.pop(transport.patient_id, None)
+            self.transported_patients.add(transport.patient_id)
+
+            self._record_event(
+                event_type="transport_completed",
+                description=(
+                    f"Transport {transport.transport_id} completed. "
+                    f"Ambulance {transport.ambulance_id} is available."
+                ),
+                patient_id=transport.patient_id,
+            )
 
         applied_events = self.deterioration_manager.apply_due_events(
             patients=self.patients,

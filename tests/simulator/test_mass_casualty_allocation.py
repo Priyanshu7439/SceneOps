@@ -73,4 +73,5 @@ def test_released_ambulance_can_be_reallocated():
     next_allocation = engine.allocate_next_patient()
 
     assert next_allocation is not None
-    assert next_allocation.patient_id != first_allocation.patient_id
+    assert next_allocation.patient_id == first_allocation.patient_id
+    assert first_allocation.patient_id not in engine.transported_patients
