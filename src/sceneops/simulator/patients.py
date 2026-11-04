@@ -46,6 +46,13 @@ class Patient(BaseModel):
     radial_pulse_present: bool
     follows_commands: bool
     major_hemorrhage: bool
+        # START assessment support
+    airway_opened: bool = False
+    capillary_refill_seconds: float | None = Field(
+        default=None,
+        ge=0,
+        le=20,
+    )
 
     # Patient characteristics for dialogue generation
     personality: str = Field(default="neutral", min_length=1)
