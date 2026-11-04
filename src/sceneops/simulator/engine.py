@@ -62,6 +62,7 @@ class SimulationEngine:
         self.patients: dict[str, Patient] = {}
         self.triage_results: dict[str, TriageResult] = {}
         self.allocations: dict[str, AllocationResult] = {}
+        self.transported_patients: set[str] = set()
         self.events: list[SimulationEvent] = []
 
     def _record_event(
@@ -193,6 +194,7 @@ class SimulationEngine:
             result
             for patient_id, result in self.triage_results.items()
             if patient_id not in self.allocations
+            and patient_id not in self.transported_patients
         ]
 
         result = self.resource_manager.allocate_next(waiting)
@@ -214,7 +216,7 @@ class SimulationEngine:
         return result
 
     def release_ambulance(self, ambulance_id: str) -> str:
-        """Release an ambulance and remove its patient allocation."""
+        """Release an ambulance and mark its patient as transported."""
 
         if self.status != SimulationStatus.RUNNING:
             raise RuntimeError(
@@ -226,6 +228,7 @@ class SimulationEngine:
         )
 
         self.allocations.pop(patient_id, None)
+        self.transported_patients.add(patient_id)
 
         self._record_event(
             event_type="ambulance_released",
