@@ -3,7 +3,6 @@ import pytest
 
 from sceneops.simulator.engine import (
     SimulationEngine,
-    SimulationStatus,
 )
 from sceneops.simulator.patients import InjuryType, Patient
 from sceneops.simulator.resources import Ambulance

@@ -2,10 +2,22 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
 
+from sceneops.agents.disclosure import DisclosurePacket
+from sceneops.agents.disclosure_rules import (
+    DisclosurePacketBuilder,
+    PatientDisclosureRecord,
+    PatientDisclosureRegistry,
+    PatientQuestion,
+)
 from sceneops.simulator.clock import ClockSnapshot, SimulationClock
 from sceneops.simulator.deterioration import (
     DeteriorationEvent,
     DeteriorationManager,
+)
+from sceneops.simulator.observations import (
+    LearnerObservation,
+    LearnerObservationRegistry,
+    ObservationType,
 )
 from sceneops.simulator.patients import Patient
 from sceneops.simulator.resources import (
@@ -67,6 +79,8 @@ class SimulationEngine:
         self.triage_results: dict[str, TriageResult] = {}
         self.allocations: dict[str, AllocationResult] = {}
         self.transported_patients: set[str] = set()
+        self.observation_registry = LearnerObservationRegistry()
+        self.disclosure_registry = PatientDisclosureRegistry()
         self.events: list[SimulationEvent] = []
 
     def _record_event(
@@ -185,6 +199,139 @@ class SimulationEngine:
         )
 
         return result
+
+    def observe_patient(
+        self,
+        patient_id: str,
+        observation_type: ObservationType,
+    ) -> LearnerObservation:
+        """
+        Record a learner assessment using the patient's current simulator state.
+
+        This method supports direct observations only. Patient-reported
+        symptoms and pain require a separate dialogue workflow.
+        """
+
+        if self.status not in (
+            SimulationStatus.CREATED,
+            SimulationStatus.RUNNING,
+        ):
+            raise RuntimeError(
+                "Patient observation is unavailable in the current state."
+            )
+
+        patient = self.patients.get(patient_id)
+
+        if patient is None:
+            raise KeyError(f"Unknown patient: {patient_id}")
+
+        if not isinstance(observation_type, ObservationType):
+            raise TypeError("observation_type must be an ObservationType.")
+
+        match observation_type:
+            case ObservationType.RESPIRATORY_RATE:
+                value = patient.respiratory_rate
+            case ObservationType.RADIAL_PULSE:
+                value = (
+                    "present"
+                    if patient.radial_pulse_present
+                    else "absent"
+                )
+            case ObservationType.CAPILLARY_REFILL:
+                value = patient.capillary_refill_seconds
+            case ObservationType.MENTAL_STATUS:
+                value = patient.mental_status.value
+            case ObservationType.AMBULATORY_STATUS:
+                value = (
+                    "ambulatory"
+                    if patient.ambulatory
+                    else "non_ambulatory"
+                )
+            case _:
+                raise ValueError(
+                    f"Observation type {observation_type.value} "
+                    "requires a separate patient dialogue or "
+                    "visual-observation workflow."
+                )
+
+        if value is None:
+            raise ValueError(
+                f"Patient {patient_id} has no recorded value for "
+                f"{observation_type.value}."
+            )
+
+        observation = LearnerObservation(
+            patient_id=patient_id,
+            observation_type=observation_type,
+            value=str(value),
+            observed_at_seconds=self.clock.elapsed_seconds,
+        )
+
+        self.observation_registry.record(observation)
+
+        self._record_event(
+            event_type="learner_observation_recorded",
+            description=(
+                f"Learner recorded {observation_type.value} "
+                f"for patient {patient_id}."
+            ),
+            patient_id=patient_id,
+        )
+
+        return observation
+
+    def record_patient_question(
+        self,
+        patient_id: str,
+        question: PatientQuestion,
+    ) -> PatientDisclosureRecord:
+        """Record a learner question and the simulated patient's answer."""
+
+        if self.status not in (
+            SimulationStatus.CREATED,
+            SimulationStatus.RUNNING,
+        ):
+            raise RuntimeError(
+                "Patient dialogue is unavailable in the current state."
+            )
+
+        patient = self.patients.get(patient_id)
+        if patient is None:
+            raise KeyError(f"Unknown patient: {patient_id}")
+
+        record = self.disclosure_registry.record_answer(patient, question)
+        self._record_event(
+            event_type="patient_information_disclosed",
+            description=(
+                f"Patient {patient_id} disclosed "
+                f"{record.disclosure.fact} after learner question."
+            ),
+            patient_id=patient_id,
+        )
+        return record
+
+    def build_patient_disclosure_packet(
+        self,
+        patient_id: str,
+        *,
+        disclose_age: bool = False,
+    ) -> DisclosurePacket:
+        """Build a restricted dialogue packet for a registered patient."""
+
+        if self.status == SimulationStatus.COMPLETED:
+            raise RuntimeError(
+                "Patient disclosure packets are unavailable after completion."
+            )
+
+        patient = self.patients.get(patient_id)
+        if patient is None:
+            raise KeyError(f"Unknown patient: {patient_id}")
+
+        return DisclosurePacketBuilder.build(
+            patient,
+            disclosure_registry=self.disclosure_registry,
+            disclose_age=disclose_age,
+        )
 
     def allocate_next_patient(self) -> AllocationResult | None:
         """Allocate an ambulance to the highest-priority waiting patient."""
