@@ -1,4 +1,3 @@
-
 import pytest
 
 from sceneops.simulator.clock import SimulationClock
@@ -44,9 +43,7 @@ def test_engine_records_respiratory_rate_observation():
 
     assert observation.value == "37"
     assert observation.observed_at_seconds == 0
-    assert engine.observation_registry.get_for_patient("P001") == [
-        observation
-    ]
+    assert engine.observation_registry.get_for_patient("P001") == [observation]
 
 
 def test_engine_records_radial_pulse_observation():
@@ -58,6 +55,52 @@ def test_engine_records_radial_pulse_observation():
     )
 
     assert observation.value == "absent"
+
+
+def test_engine_records_follows_commands_observation():
+    engine = make_engine()
+
+    observation = engine.observe_patient(
+        "P001",
+        ObservationType.FOLLOWS_COMMANDS,
+    )
+
+    assert observation.value == "does not follow commands"
+
+
+def test_engine_records_follows_commands_when_true():
+    engine = make_engine()
+    engine.patients["P001"].follows_commands = True
+
+    observation = engine.observe_patient(
+        "P001",
+        ObservationType.FOLLOWS_COMMANDS,
+    )
+
+    assert observation.value == "follows commands"
+
+
+def test_engine_records_visible_hemorrhage_observation():
+    engine = make_engine()
+
+    observation = engine.observe_patient(
+        "P001",
+        ObservationType.VISIBLE_HEMORRHAGE,
+    )
+
+    assert observation.value == "visible major hemorrhage"
+
+
+def test_engine_records_no_visible_hemorrhage():
+    engine = make_engine()
+    engine.patients["P001"].major_hemorrhage = False
+
+    observation = engine.observe_patient(
+        "P001",
+        ObservationType.VISIBLE_HEMORRHAGE,
+    )
+
+    assert observation.value == "no visible major hemorrhage"
 
 
 def test_pain_observation_requires_dialogue_workflow():

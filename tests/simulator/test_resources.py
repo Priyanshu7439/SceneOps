@@ -1,4 +1,3 @@
-
 import pytest
 
 from sceneops.simulator.resources import (
@@ -19,10 +18,7 @@ def make_result(patient_id, category):
 
 
 def make_manager(count=2):
-    ambulances = [
-        Ambulance(ambulance_id=f"A{i:03}")
-        for i in range(1, count + 1)
-    ]
+    ambulances = [Ambulance(ambulance_id=f"A{i:03}") for i in range(1, count + 1)]
     return ResourceManager(ambulances)
 
 
@@ -142,7 +138,9 @@ def test_same_patient_cannot_be_assigned_twice():
 
 def test_duplicate_ambulance_ids_are_rejected():
     with pytest.raises(ValueError):
-        ResourceManager([
-            Ambulance(ambulance_id="A001"),
-            Ambulance(ambulance_id="A001"),
-        ])
+        ResourceManager(
+            [
+                Ambulance(ambulance_id="A001"),
+                Ambulance(ambulance_id="A001"),
+            ]
+        )

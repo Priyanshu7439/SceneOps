@@ -10,7 +10,9 @@ class SceneNarrationAgent:
 
     async def generate(self, request: AgentRequest) -> AgentResponse:
         if request.task != AgentTask.SCENE_NARRATION:
-            raise ValueError("SceneNarrationAgent only accepts scene_narration requests.")
+            raise ValueError(
+                "SceneNarrationAgent only accepts scene_narration requests."
+            )
 
         facts = "\n".join(
             f"- {fact.fact}: {fact.value}" for fact in request.scene_facts

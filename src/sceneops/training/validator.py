@@ -13,9 +13,7 @@ ALLOWED_DISCLOSURE_FACTS = {
     "reported_pain_level",
 }
 
-DISCLOSURE_PATTERN = re.compile(
-    r"Authorized disclosure: ([a-z_]+) = ([0-9]{1,2}/10)\."
-)
+DISCLOSURE_PATTERN = re.compile(r"Authorized disclosure: ([a-z_]+) = ([0-9]{1,2}/10)\.")
 
 
 class DatasetValidationError(ValueError):
@@ -32,14 +30,9 @@ class PatientDialogueDatasetValidator:
         errors: list[str] = []
 
         if not examples:
-            raise DatasetValidationError(
-                "Dataset is empty."
-            )
+            raise DatasetValidationError("Dataset is empty.")
 
-        example_ids = [
-            example.example_id
-            for example in examples
-        ]
+        example_ids = [example.example_id for example in examples]
 
         duplicates = [
             example_id
@@ -48,9 +41,7 @@ class PatientDialogueDatasetValidator:
         ]
 
         if duplicates:
-            errors.append(
-                f"Duplicate example IDs: {duplicates}"
-            )
+            errors.append(f"Duplicate example IDs: {duplicates}")
 
         patient_counts: Counter[str] = Counter()
         scenario_ids: set[str] = set()
@@ -72,29 +63,18 @@ class PatientDialogueDatasetValidator:
                 )
 
             if len(example.messages) != 3:
-                errors.append(
-                    f"{example.example_id}: expected exactly 3 messages."
-                )
+                errors.append(f"{example.example_id}: expected exactly 3 messages.")
                 continue
 
-            roles = tuple(
-                message.role
-                for message in example.messages
-            )
+            roles = tuple(message.role for message in example.messages)
 
             if roles != ("system", "user", "assistant"):
-                errors.append(
-                    f"{example.example_id}: invalid message order {roles}."
-                )
+                errors.append(f"{example.example_id}: invalid message order {roles}.")
                 continue
 
-            system_message, user_message, assistant_message = (
-                example.messages
-            )
+            system_message, user_message, assistant_message = example.messages
 
-            match = DISCLOSURE_PATTERN.search(
-                system_message.content
-            )
+            match = DISCLOSURE_PATTERN.search(system_message.content)
 
             if match is None:
                 errors.append(
@@ -135,8 +115,7 @@ class PatientDialogueDatasetValidator:
 
         if errors:
             raise DatasetValidationError(
-                "Dataset validation failed:\n- "
-                + "\n- ".join(errors)
+                "Dataset validation failed:\n- " + "\n- ".join(errors)
             )
 
         return {

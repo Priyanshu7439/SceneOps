@@ -1,6 +1,3 @@
-
-
-
 from sceneops.simulator.patients import (
     InjuryType,
     Patient,

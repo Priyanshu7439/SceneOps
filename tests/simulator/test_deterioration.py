@@ -1,4 +1,3 @@
-
 import pytest
 from pydantic import ValidationError
 
@@ -87,10 +86,8 @@ def test_multiple_events_are_applied_in_timestamp_order():
     patient = make_patient()
 
     events = [
-        make_event("E002", at_seconds=120,
-                   changes=PatientChanges(respiratory_rate=40)),
-        make_event("E001", at_seconds=60,
-                   changes=PatientChanges(respiratory_rate=35)),
+        make_event("E002", at_seconds=120, changes=PatientChanges(respiratory_rate=40)),
+        make_event("E001", at_seconds=60, changes=PatientChanges(respiratory_rate=35)),
     ]
 
     manager = DeteriorationManager(events)
@@ -105,12 +102,8 @@ def test_multiple_patients_can_be_updated():
     p2 = make_patient("P002")
 
     events = [
-        make_event("E001", "P001", changes=PatientChanges(
-            respiratory_rate=35
-        )),
-        make_event("E002", "P002", changes=PatientChanges(
-            follows_commands=False
-        )),
+        make_event("E001", "P001", changes=PatientChanges(respiratory_rate=35)),
+        make_event("E002", "P002", changes=PatientChanges(follows_commands=False)),
     ]
 
     manager = DeteriorationManager(events)
@@ -158,10 +151,12 @@ def test_unknown_patient_does_not_mark_event_as_applied():
 
 def test_duplicate_event_ids_are_rejected():
     with pytest.raises(ValueError):
-        DeteriorationManager([
-            make_event("E001"),
-            make_event("E001", at_seconds=120),
-        ])
+        DeteriorationManager(
+            [
+                make_event("E001"),
+                make_event("E001", at_seconds=120),
+            ]
+        )
 
 
 def test_empty_patient_changes_are_rejected():

@@ -85,9 +85,7 @@ class VLLMBackend:
             raise VLLMBackendError("vLLM request timed out.") from exc
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
-            raise VLLMBackendError(
-                f"vLLM returned HTTP {status}."
-            ) from exc
+            raise VLLMBackendError(f"vLLM returned HTTP {status}.") from exc
         except (httpx.RequestError, KeyError, IndexError, TypeError, ValueError) as exc:
             if isinstance(exc, VLLMBackendError):
                 raise

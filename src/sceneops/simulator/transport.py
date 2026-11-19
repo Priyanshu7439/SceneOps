@@ -1,4 +1,3 @@
-
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -47,19 +46,13 @@ class TransportManager:
         if current_time_seconds < self._last_processed_second:
             raise ValueError("Transport time cannot move backwards.")
 
-        ambulance = self.resource_manager.ambulances.get(
-            allocation.ambulance_id
-        )
+        ambulance = self.resource_manager.ambulances.get(allocation.ambulance_id)
 
         if ambulance is None:
-            raise KeyError(
-                f"Unknown ambulance: {allocation.ambulance_id}"
-            )
+            raise KeyError(f"Unknown ambulance: {allocation.ambulance_id}")
 
         if ambulance.assigned_patient_id != allocation.patient_id:
-            raise ValueError(
-                "Ambulance is not assigned to this patient."
-            )
+            raise ValueError("Ambulance is not assigned to this patient.")
 
         if any(
             record.patient_id == allocation.patient_id
@@ -102,17 +95,12 @@ class TransportManager:
             if record.status != TransportStatus.IN_PROGRESS:
                 continue
 
-            completion_time = (
-                record.started_at_seconds
-                + record.travel_duration_seconds
-            )
+            completion_time = record.started_at_seconds + record.travel_duration_seconds
 
             if completion_time > current_time_seconds:
                 continue
 
-            self.resource_manager.release_ambulance(
-                record.ambulance_id
-            )
+            self.resource_manager.release_ambulance(record.ambulance_id)
 
             record.completed_at_seconds = completion_time
             record.status = TransportStatus.COMPLETED

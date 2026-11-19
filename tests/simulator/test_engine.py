@@ -1,10 +1,10 @@
-
 import pytest
 
 from sceneops.simulator.engine import (
     SimulationEngine,
     SimulationStatus,
 )
+from sceneops.simulator.observations import ObservationType
 from sceneops.simulator.patients import InjuryType, Patient
 from sceneops.simulator.resources import Ambulance
 from sceneops.simulator.triage import TriageCategory
@@ -27,8 +27,7 @@ def make_patient(patient_id="P001", ambulatory=False, **overrides):
 
 def make_engine(ambulance_count=2):
     ambulances = [
-        Ambulance(ambulance_id=f"A{i:03}")
-        for i in range(1, ambulance_count + 1)
+        Ambulance(ambulance_id=f"A{i:03}") for i in range(1, ambulance_count + 1)
     ]
     return SimulationEngine(ambulances)
 
@@ -189,3 +188,38 @@ def test_completed_simulation_cannot_advance_time():
 
     with pytest.raises(RuntimeError):
         engine.advance_time(60)
+
+
+def test_observe_patient_visible_hemorrhage():
+    engine = make_engine()
+    engine.add_patient(make_patient(major_hemorrhage=True))
+
+    observation = engine.observe_patient(
+        "P001",
+        ObservationType.VISIBLE_HEMORRHAGE,
+    )
+
+    assert observation.value == "visible major hemorrhage"
+    assert observation.observation_type == ObservationType.VISIBLE_HEMORRHAGE
+    assert observation.patient_id == "P001"
+
+
+def test_observe_patient_no_visible_hemorrhage():
+    engine = make_engine()
+    engine.add_patient(make_patient(major_hemorrhage=False))
+
+    observation = engine.observe_patient(
+        "P001",
+        ObservationType.VISIBLE_HEMORRHAGE,
+    )
+
+    assert observation.value == "no visible major hemorrhage"
+
+
+def test_simulation_cannot_complete_before_start():
+    engine = make_engine()
+
+    with pytest.raises(RuntimeError, match="running or paused"):
+        engine.complete()
+
+    assert engine.status == SimulationStatus.CREATED

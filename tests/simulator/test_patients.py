@@ -1,4 +1,3 @@
-
 import pytest
 from pydantic import ValidationError
 
@@ -35,7 +34,6 @@ def test_patient_creation():
     assert patient.pain_level == 4
 
 
-
 def test_patient_age_validation():
     with pytest.raises(ValidationError):
         Patient(
@@ -47,7 +45,6 @@ def test_patient_age_validation():
             follows_commands=True,
             major_hemorrhage=False,
         )
-
 
 
 def test_patient_pain_update():

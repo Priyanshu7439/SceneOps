@@ -71,9 +71,7 @@ class SimulationEngine:
         self.resource_manager = ResourceManager(ambulances)
         self.transport_manager = TransportManager(self.resource_manager)
 
-        self.deterioration_manager = DeteriorationManager(
-            deterioration_events or []
-        )
+        self.deterioration_manager = DeteriorationManager(deterioration_events or [])
 
         self.patients: dict[str, Patient] = {}
         self.triage_results: dict[str, TriageResult] = {}
@@ -107,9 +105,7 @@ class SimulationEngine:
             )
 
         if patient.patient_id in self.patients:
-            raise ValueError(
-                f"Patient {patient.patient_id} is already registered."
-            )
+            raise ValueError(f"Patient {patient.patient_id} is already registered.")
 
         self.patients[patient.patient_id] = patient
 
@@ -163,9 +159,7 @@ class SimulationEngine:
             SimulationStatus.RUNNING,
             SimulationStatus.PAUSED,
         ):
-            raise RuntimeError(
-                "Only a running or paused simulation can be completed."
-            )
+            raise RuntimeError("Only a running or paused simulation can be completed.")
 
         self.status = SimulationStatus.COMPLETED
         self._record_event(
@@ -229,24 +223,28 @@ class SimulationEngine:
             raise TypeError("observation_type must be an ObservationType.")
 
         match observation_type:
+            case ObservationType.FOLLOWS_COMMANDS:
+                value = (
+                    "follows commands"
+                    if patient.follows_commands
+                    else "does not follow commands"
+                )
             case ObservationType.RESPIRATORY_RATE:
                 value = patient.respiratory_rate
             case ObservationType.RADIAL_PULSE:
+                value = "present" if patient.radial_pulse_present else "absent"
+            case ObservationType.VISIBLE_HEMORRHAGE:
                 value = (
-                    "present"
-                    if patient.radial_pulse_present
-                    else "absent"
+                    "visible major hemorrhage"
+                    if patient.major_hemorrhage
+                    else "no visible major hemorrhage"
                 )
             case ObservationType.CAPILLARY_REFILL:
                 value = patient.capillary_refill_seconds
             case ObservationType.MENTAL_STATUS:
                 value = patient.mental_status.value
             case ObservationType.AMBULATORY_STATUS:
-                value = (
-                    "ambulatory"
-                    if patient.ambulatory
-                    else "non_ambulatory"
-                )
+                value = "ambulatory" if patient.ambulatory else "non_ambulatory"
             case _:
                 raise ValueError(
                     f"Observation type {observation_type.value} "
@@ -272,8 +270,7 @@ class SimulationEngine:
         self._record_event(
             event_type="learner_observation_recorded",
             description=(
-                f"Learner recorded {observation_type.value} "
-                f"for patient {patient_id}."
+                f"Learner recorded {observation_type.value} for patient {patient_id}."
             ),
             patient_id=patient_id,
         )
@@ -291,9 +288,7 @@ class SimulationEngine:
             SimulationStatus.CREATED,
             SimulationStatus.RUNNING,
         ):
-            raise RuntimeError(
-                "Patient dialogue is unavailable in the current state."
-            )
+            raise RuntimeError("Patient dialogue is unavailable in the current state.")
 
         patient = self.patients.get(patient_id)
         if patient is None:
@@ -337,9 +332,7 @@ class SimulationEngine:
         """Allocate an ambulance to the highest-priority waiting patient."""
 
         if self.status != SimulationStatus.RUNNING:
-            raise RuntimeError(
-                "Allocation requires a running simulation."
-            )
+            raise RuntimeError("Allocation requires a running simulation.")
 
         waiting = [
             result
@@ -358,8 +351,7 @@ class SimulationEngine:
         self._record_event(
             event_type="ambulance_allocated",
             description=(
-                f"Ambulance {result.ambulance_id} assigned to "
-                f"{result.patient_id}."
+                f"Ambulance {result.ambulance_id} assigned to {result.patient_id}."
             ),
             patient_id=result.patient_id,
         )
@@ -374,9 +366,7 @@ class SimulationEngine:
         """Start transport for an allocated patient."""
 
         if self.status != SimulationStatus.RUNNING:
-            raise RuntimeError(
-                "Transport requires a running simulation."
-            )
+            raise RuntimeError("Transport requires a running simulation.")
 
         allocation = self.allocations.get(patient_id)
 
@@ -406,24 +396,17 @@ class SimulationEngine:
         """Manually release an ambulance that is not transporting a patient."""
 
         if self.status != SimulationStatus.RUNNING:
-            raise RuntimeError(
-                "Ambulance release requires a running simulation."
-            )
+            raise RuntimeError("Ambulance release requires a running simulation.")
 
         active_transport = any(
-            record.ambulance_id == ambulance_id
-            and record.status.value == "in_progress"
+            record.ambulance_id == ambulance_id and record.status.value == "in_progress"
             for record in self.transport_manager.transports.values()
         )
 
         if active_transport:
-            raise ValueError(
-                "Cannot manually release an ambulance during transport."
-            )
+            raise ValueError("Cannot manually release an ambulance during transport.")
 
-        patient_id = self.resource_manager.release_ambulance(
-            ambulance_id
-        )
+        patient_id = self.resource_manager.release_ambulance(ambulance_id)
 
         self.allocations.pop(patient_id, None)
 
@@ -442,9 +425,7 @@ class SimulationEngine:
         """
 
         if self.status != SimulationStatus.RUNNING:
-            raise RuntimeError(
-                "Clock can advance only while simulation is running."
-            )
+            raise RuntimeError("Clock can advance only while simulation is running.")
 
         snapshot = self.clock.advance(seconds)
         completed_transports = self.transport_manager.advance_time(
@@ -483,10 +464,7 @@ class SimulationEngine:
 
             self._record_event(
                 event_type="patient_reassessed",
-                description=(
-                    f"Updated triage category: "
-                    f"{result.category.value}."
-                ),
+                description=(f"Updated triage category: {result.category.value}."),
                 patient_id=applied.patient_id,
             )
 

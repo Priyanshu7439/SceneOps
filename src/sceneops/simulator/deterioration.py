@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sceneops.simulator.patients import MentalStatus, Patient
@@ -97,8 +96,7 @@ class DeteriorationManager:
         for event in due_events:
             if event.patient_id not in patients:
                 raise KeyError(
-                    f"Unknown patient {event.patient_id} "
-                    f"for event {event.event_id}."
+                    f"Unknown patient {event.patient_id} for event {event.event_id}."
                 )
 
         applied: list[AppliedDeterioration] = []

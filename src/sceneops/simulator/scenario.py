@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from sceneops.simulator.deterioration import DeteriorationEvent
@@ -23,9 +22,7 @@ class ScenarioDefinition(BaseModel):
     patients: list[Patient] = Field(min_length=1)
     ambulances: list[Ambulance] = Field(min_length=1)
 
-    deterioration_events: list[DeteriorationEvent] = Field(
-        default_factory=list
-    )
+    deterioration_events: list[DeteriorationEvent] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_scenario(self) -> "ScenarioDefinition":
@@ -34,9 +31,7 @@ class ScenarioDefinition(BaseModel):
         if len(patient_ids) != len(set(patient_ids)):
             raise ValueError("Patient IDs must be unique within a scenario.")
 
-        ambulance_ids = [
-            ambulance.ambulance_id for ambulance in self.ambulances
-        ]
+        ambulance_ids = [ambulance.ambulance_id for ambulance in self.ambulances]
 
         if len(ambulance_ids) != len(set(ambulance_ids)):
             raise ValueError("Ambulance IDs must be unique within a scenario.")

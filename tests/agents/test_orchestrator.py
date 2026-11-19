@@ -52,9 +52,7 @@ def make_patient_request() -> AgentRequest:
     packet = DisclosurePacket(
         patient_id="P001",
         profile=PatientProfile(personality="anxious", speech_style="short"),
-        current_disclosures=[
-            DisclosureFact(fact="reported_pain_level", value="7/10")
-        ],
+        current_disclosures=[DisclosureFact(fact="reported_pain_level", value="7/10")],
     )
     return AgentRequest(
         task=AgentTask.PATIENT_DIALOGUE,
@@ -67,7 +65,9 @@ def make_scene_request() -> AgentRequest:
     return AgentRequest(
         task=AgentTask.SCENE_NARRATION,
         user_message="Describe the current scene.",
-        scene_facts=(SceneFact(fact="responder_arrival", value="one responder arrived"),),
+        scene_facts=(
+            SceneFact(fact="responder_arrival", value="one responder arrived"),
+        ),
     )
 
 

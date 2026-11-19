@@ -1,4 +1,3 @@
-
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -46,7 +45,7 @@ class Patient(BaseModel):
     radial_pulse_present: bool
     follows_commands: bool
     major_hemorrhage: bool
-        # START assessment support
+    # START assessment support
     airway_opened: bool = False
     capillary_refill_seconds: float | None = Field(
         default=None,

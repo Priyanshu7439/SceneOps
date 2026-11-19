@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+from sceneops.training.temporal_scene_narration_dataset import (
+    TEMPORAL_SCENE_GENERATOR_VERSION,
+    TemporalSceneNarrationDatasetGenerator,
+)
+from sceneops.training.temporal_scene_narration_validator import (
+    TemporalSceneNarrationValidator,
+)
+
+
+def _write_jsonl(path: Path, records: list[dict]) -> None:
+    """Write JSON records as UTF-8 JSONL."""
+
+    with path.open("w", encoding="utf-8", newline="\n") as file:
+        for record in records:
+            file.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _sha256(path: Path) -> str:
+    """Calculate a file's SHA-256 checksum."""
+
+    digest = hashlib.sha256()
+
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(8192), b""):
+            digest.update(chunk)
+
+    return digest.hexdigest()
+
+
+def generate_and_export(
+    output_dir: Path,
+    scenario_indices: tuple[int, ...] = (1, 2, 3, 4, 5),
+) -> dict:
+    """Generate, validate and export the temporal narration dataset."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = TemporalSceneNarrationDatasetGenerator()
+    examples = generator.generate(scenario_indices)
+
+    validation = TemporalSceneNarrationValidator.validate(examples)
+
+    master_path = output_dir / "temporal_scene_narration_v1.jsonl"
+    training_path = output_dir / "temporal_scene_narration_v1_training.jsonl"
+    manifest_path = output_dir / "temporal_scene_narration_v1_manifest.json"
+
+    master_records = [example.model_dump(mode="json") for example in examples]
+
+    training_records = [example.to_training_record() for example in examples]
+
+    # Write temporary files first so incomplete exports are not
+    # mistaken for completed datasets.
+    temporary_paths = [
+        master_path.with_suffix(".jsonl.tmp"),
+        training_path.with_suffix(".jsonl.tmp"),
+        manifest_path.with_suffix(".json.tmp"),
+    ]
+
+    try:
+        _write_jsonl(temporary_paths[0], master_records)
+        _write_jsonl(temporary_paths[1], training_records)
+
+        manifest = {
+            "dataset_name": "temporal_scene_narration",
+            "dataset_version": "1.0.0",
+            "generator_version": TEMPORAL_SCENE_GENERATOR_VERSION,
+            "total_examples": validation["examples"],
+            "unique_scenarios": validation["unique_scenarios"],
+            "unique_patients": validation["unique_patients"],
+            "unique_example_ids": validation["unique_example_ids"],
+            "scenario_indices": list(scenario_indices),
+            "split_status": "not_split",
+            "split_reason": (
+                "Dataset is too small for meaningful "
+                "scenario-level train/validation/test splitting."
+            ),
+            "validation_status": "passed",
+            "master_file": master_path.name,
+            "training_file": training_path.name,
+            "training_format": "messages",
+        }
+
+        # Validate the generated training records before publishing.
+        if len(training_records) != validation["examples"]:
+            raise ValueError("Training export count does not match validated examples.")
+
+        _write_jsonl(
+            temporary_paths[2],
+            [manifest],
+        )
+
+        # Replace destination files only after all temporary writes succeed.
+        for temporary_path, destination_path in zip(
+            temporary_paths,
+            (master_path, training_path, manifest_path),
+            strict=True,
+        ):
+            temporary_path.replace(destination_path)
+
+    finally:
+        for temporary_path in temporary_paths:
+            if temporary_path.exists():
+                temporary_path.unlink()
+
+    manifest["master_sha256"] = _sha256(master_path)
+    manifest["training_sha256"] = _sha256(training_path)
+
+    # Update manifest with checksums.
+    manifest_temporary_path = manifest_path.with_suffix(".json.tmp")
+
+    try:
+        _write_jsonl(manifest_temporary_path, [manifest])
+        manifest_temporary_path.replace(manifest_path)
+    finally:
+        if manifest_temporary_path.exists():
+            manifest_temporary_path.unlink()
+
+    return manifest
+
+
+def main() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    output_dir = project_root / "data" / "processed"
+
+    manifest = generate_and_export(output_dir)
+
+    print("Temporal dataset generation and validation successful.")
+    print(f"Total examples: {manifest['total_examples']}")
+    print(f"Unique scenarios: {manifest['unique_scenarios']}")
+    print(f"Unique patients: {manifest['unique_patients']}")
+    print(f"Validation: {manifest['validation_status']}")
+    print(f"Master dataset: {output_dir / manifest['master_file']}")
+    print(f"Training dataset: {output_dir / manifest['training_file']}")
+    print(f"Manifest: {output_dir / 'temporal_scene_narration_v1_manifest.json'}")
+    print("Scenario-level split: deferred")
+
+
+if __name__ == "__main__":
+    main()

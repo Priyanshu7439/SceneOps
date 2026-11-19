@@ -1,4 +1,3 @@
-
 import pytest
 
 from sceneops.simulator.resources import (
@@ -13,9 +12,11 @@ from sceneops.simulator.triage import TriageCategory
 
 
 def create_transport_setup():
-    resource_manager = ResourceManager([
-        Ambulance(ambulance_id="A001"),
-    ])
+    resource_manager = ResourceManager(
+        [
+            Ambulance(ambulance_id="A001"),
+        ]
+    )
 
     allocation = resource_manager.allocate_patient(
         patient_id="P001",
@@ -101,4 +102,3 @@ def test_released_ambulance_can_be_reused():
 
     assert next_allocation is not None
     assert next_allocation.ambulance_id == "A001"
-

@@ -37,10 +37,10 @@ class ResourceManager:
     """Manages ambulance availability and patient assignments."""
 
     PRIORITY: ClassVar[dict[TriageCategory, int]] = {
-    TriageCategory.RED: 0,
-    TriageCategory.YELLOW: 1,
-    TriageCategory.GREEN: 2,
-}
+        TriageCategory.RED: 0,
+        TriageCategory.YELLOW: 1,
+        TriageCategory.GREEN: 2,
+    }
 
     def __init__(self, ambulances: list[Ambulance]) -> None:
         ambulance_ids = [ambulance.ambulance_id for ambulance in ambulances]
@@ -49,8 +49,7 @@ class ResourceManager:
             raise ValueError("Ambulance IDs must be unique.")
 
         self.ambulances = {
-            ambulance.ambulance_id: ambulance
-            for ambulance in ambulances
+            ambulance.ambulance_id: ambulance for ambulance in ambulances
         }
 
     def available_ambulances(self) -> list[Ambulance]:
@@ -102,9 +101,7 @@ class ResourceManager:
         """
 
         eligible = [
-            patient
-            for patient in waiting_patients
-            if patient.category in self.PRIORITY
+            patient for patient in waiting_patients if patient.category in self.PRIORITY
         ]
 
         if not eligible:

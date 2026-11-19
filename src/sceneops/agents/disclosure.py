@@ -10,6 +10,15 @@ class DisclosureFact(BaseModel):
     value: str = Field(min_length=1)
 
 
+class ConversationTurn(BaseModel):
+    """An unverified dialogue exchange retained for conversational continuity."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    user_message: str = Field(min_length=1, max_length=4000)
+    patient_response: str = Field(min_length=1, max_length=8000)
+
+
 class PatientProfile(BaseModel):
     """Non-clinical characteristics permitted for dialogue generation."""
 
@@ -33,7 +42,7 @@ class DisclosurePacket(BaseModel):
     patient_id: str = Field(min_length=1)
     profile: PatientProfile
     current_disclosures: list[DisclosureFact] = Field(default_factory=list)
-    conversation_memory: list[DisclosureFact] = Field(default_factory=list)
+    conversation_memory: list[ConversationTurn] = Field(default_factory=list)
     response_instructions: list[str] = Field(
         default_factory=lambda: [
             "Respond as the simulated patient.",

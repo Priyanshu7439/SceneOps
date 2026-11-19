@@ -1,4 +1,3 @@
-
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
@@ -79,12 +78,9 @@ def classify_patient(patient: Patient) -> TriageResult:
         )
 
     # Step 4: Perfusion
-    poor_perfusion = (
-        not patient.radial_pulse_present
-        or (
-            patient.capillary_refill_seconds is not None
-            and patient.capillary_refill_seconds > 2
-        )
+    poor_perfusion = not patient.radial_pulse_present or (
+        patient.capillary_refill_seconds is not None
+        and patient.capillary_refill_seconds > 2
     )
 
     if poor_perfusion:

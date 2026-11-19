@@ -1,4 +1,3 @@
-
 import pytest
 
 from sceneops.simulator.engine import (
@@ -25,8 +24,7 @@ def make_patient(patient_id: str) -> Patient:
 
 def create_running_engine(patient_count=1):
     ambulances = [
-        Ambulance(ambulance_id=f"A{i:03}")
-        for i in range(1, patient_count + 1)
+        Ambulance(ambulance_id=f"A{i:03}") for i in range(1, patient_count + 1)
     ]
 
     engine = SimulationEngine(ambulances)

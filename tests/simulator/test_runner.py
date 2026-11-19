@@ -1,4 +1,3 @@
-
 import pytest
 
 from sceneops.simulator.engine import SimulationStatus

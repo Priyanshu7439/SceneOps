@@ -1,66 +1,83 @@
-
 from sceneops.simulator.deterioration import (
     DeteriorationEvent,
     PatientChanges,
 )
+from sceneops.simulator.patient_profile_generator import (
+    PatientProfileGenerator,
+)
 from sceneops.simulator.patients import InjuryType, Patient
 from sceneops.simulator.resources import Ambulance
 from sceneops.simulator.scenario import ScenarioDefinition
+from sceneops.simulator.scenario_config import ScenarioConfig
+from sceneops.simulator.scenario_event_generator import (
+    ScenarioEventGenerator,
+)
+from sceneops.simulator.scenario_validator import ScenarioValidator
+
+SCENARIO_DURATION_SECONDS = 600
+PATIENTS_PER_CATEGORY = 4
+AMBULANCE_COUNT = 5
+DEFAULT_SCENARIO_INDICES = (1, 2, 3, 4, 5)
 
 
-def create_mass_casualty_scenario() -> ScenarioDefinition:
-    """Create a deterministic 20-patient synthetic training scenario."""
+def create_mass_casualty_scenario(
+    scenario_index: int = 1,
+) -> ScenarioDefinition:
+    """
+    Create a deterministic synthetic 20-patient training scenario.
 
+    Scenario index 1 preserves the original MCI-001 scenario.
+    Higher indexes introduce controlled variations while preserving
+    the five initial triage archetypes.
+    """
+    if isinstance(scenario_index, bool) or not isinstance(scenario_index, int):
+        raise TypeError("scenario_index must be an integer.")
+
+    if scenario_index < 1:
+        raise ValueError("scenario_index must be >= 1.")
+
+    scenario_id = f"MCI-{scenario_index:03d}"
+
+    # Controlled variation. Index 1 produces zero offsets.
+    variation = scenario_index - 1
+    respiratory_offset = variation % 3
+    demographic_offset = (variation * 7) % 55
+    injury_offset = variation % len(InjuryType)
+    event_offset = (variation % 5) * 30
+
+    # Four patient archetypes per initial triage category.
     profiles = [
-        # 4 GREEN: ambulatory patients
-        {
-            "ambulatory": True,
-            "respiratory_rate": 20,
-            "radial_pulse_present": True,
-            "follows_commands": True,
-        },
-        {
-            "ambulatory": True,
-            "respiratory_rate": 18,
-            "radial_pulse_present": True,
-            "follows_commands": True,
-        },
-        {
-            "ambulatory": True,
-            "respiratory_rate": 22,
-            "radial_pulse_present": True,
-            "follows_commands": True,
-        },
-        {
-            "ambulatory": True,
-            "respiratory_rate": 24,
-            "radial_pulse_present": True,
-            "follows_commands": True,
-        },
-
-        # 4 YELLOW: non-ambulatory, stable initial observations
+        # GREEN: ambulatory patients.
         *[
             {
-                "ambulatory": False,
-                "respiratory_rate": 20,
+                "ambulatory": True,
+                "respiratory_rate": rate + respiratory_offset,
                 "radial_pulse_present": True,
                 "follows_commands": True,
             }
-            for _ in range(4)
+            for rate in (20, 18, 22, 24)
         ],
-
-        # 4 RED: abnormal respiratory rate
+        # YELLOW: non-ambulatory, initially stable.
         *[
             {
                 "ambulatory": False,
-                "respiratory_rate": 35,
+                "respiratory_rate": 20 + respiratory_offset,
                 "radial_pulse_present": True,
                 "follows_commands": True,
             }
-            for _ in range(4)
+            for _ in range(PATIENTS_PER_CATEGORY)
         ],
-
-        # 4 BLACK: remain apneic after airway repositioning
+        # RED: abnormal respiratory rate.
+        *[
+            {
+                "ambulatory": False,
+                "respiratory_rate": 35 + respiratory_offset,
+                "radial_pulse_present": True,
+                "follows_commands": True,
+            }
+            for _ in range(PATIENTS_PER_CATEGORY)
+        ],
+        # BLACK: remain apneic after airway repositioning.
         *[
             {
                 "ambulatory": False,
@@ -69,10 +86,9 @@ def create_mass_casualty_scenario() -> ScenarioDefinition:
                 "radial_pulse_present": False,
                 "follows_commands": False,
             }
-            for _ in range(4)
+            for _ in range(PATIENTS_PER_CATEGORY)
         ],
-
-        # 4 PENDING: respiratory assessment not yet recorded
+        # PENDING: respiratory assessment not recorded.
         *[
             {
                 "ambulatory": False,
@@ -80,7 +96,7 @@ def create_mass_casualty_scenario() -> ScenarioDefinition:
                 "radial_pulse_present": True,
                 "follows_commands": True,
             }
-            for _ in range(4)
+            for _ in range(PATIENTS_PER_CATEGORY)
         ],
     ]
 
@@ -89,8 +105,8 @@ def create_mass_casualty_scenario() -> ScenarioDefinition:
     patients = [
         Patient(
             patient_id=f"P{index + 1:03d}",
-            age=20 + (index * 3) % 55,
-            injury_type=injury_types[index % len(injury_types)],
+            age=20 + (index * 3 + demographic_offset) % 55,
+            injury_type=injury_types[(index + injury_offset) % len(injury_types)],
             major_hemorrhage=False,
             **profile,
         )
@@ -98,34 +114,97 @@ def create_mass_casualty_scenario() -> ScenarioDefinition:
     ]
 
     ambulances = [
-        Ambulance(ambulance_id=f"A{index + 1:03d}")
-        for index in range(5)
+        Ambulance(ambulance_id=f"A{index + 1:03d}") for index in range(AMBULANCE_COUNT)
     ]
 
     deterioration_events = [
         DeteriorationEvent(
             event_id="EV001",
             patient_id="P005",
-            at_seconds=120,
+            at_seconds=120 + event_offset,
             changes=PatientChanges(respiratory_rate=35),
         ),
         DeteriorationEvent(
             event_id="EV002",
             patient_id="P006",
-            at_seconds=240,
+            at_seconds=240 + event_offset,
             changes=PatientChanges(follows_commands=False),
         ),
     ]
 
-    return ScenarioDefinition(
-        scenario_id="MCI-001",
-        title="20-Patient Mass Casualty Exercise",
-        description=(
+    # Preserve the original metadata for the default scenario.
+    if scenario_index == 1:
+        title = "20-Patient Mass Casualty Exercise"
+        description = (
             "Synthetic educational scenario with 20 patients, "
             "five ambulances and two timed deterioration events."
-        ),
-        duration_seconds=600,
+        )
+    else:
+        title = f"20-Patient Mass Casualty Exercise {scenario_index}"
+        description = (
+            "Synthetic educational scenario with 20 patients, "
+            "five ambulances and two timed deterioration events. "
+            f"Deterministic variation index: {scenario_index}."
+        )
+
+    return ScenarioDefinition(
+        scenario_id=scenario_id,
+        title=title,
+        description=description,
+        duration_seconds=SCENARIO_DURATION_SECONDS,
         patients=patients,
         ambulances=ambulances,
         deterioration_events=deterioration_events,
     )
+
+
+def create_hybrid_scenario(
+    config: ScenarioConfig,
+) -> ScenarioDefinition:
+    """
+    Generate a reproducible scenario using configuration-based
+    structure and seed-based patient and event variations.
+
+    The existing indexed scenario factory remains independent.
+    """
+    if not isinstance(config, ScenarioConfig):
+        raise TypeError("config must be a ScenarioConfig instance.")
+
+    patient_generator = PatientProfileGenerator()
+    event_generator = ScenarioEventGenerator()
+    validator = ScenarioValidator()
+
+    # Generate patient profiles.
+    patients = patient_generator.generate(config)
+
+    # Generate deterioration events for these patients.
+    deterioration_events = event_generator.generate(
+        config,
+        patients,
+    )
+
+    # Generate ambulance resources.
+    ambulances = [
+        Ambulance(ambulance_id=f"A{index:03d}")
+        for index in range(1, config.ambulance_count + 1)
+    ]
+
+    # Assemble the scenario.
+    scenario = ScenarioDefinition(
+        scenario_id=config.scenario_id,
+        title=f"Hybrid Mass Casualty Exercise - {config.scenario_id}",
+        description=(
+            "Synthetic educational mass-casualty scenario "
+            "generated using configuration-based structure "
+            "and deterministic seed-based variations."
+        ),
+        duration_seconds=config.duration_seconds,
+        patients=patients,
+        ambulances=ambulances,
+        deterioration_events=deterioration_events,
+    )
+
+    # Validate before returning.
+    validator.validate(config, scenario)
+
+    return scenario

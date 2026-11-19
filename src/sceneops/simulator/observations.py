@@ -1,4 +1,3 @@
-
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,6 +12,7 @@ class ObservationType(str, Enum):
     VISIBLE_HEMORRHAGE = "visible_hemorrhage"
     REPORTED_PAIN = "reported_pain"
     REPORTED_SYMPTOM = "reported_symptom"
+    FOLLOWS_COMMANDS = "follows_commands"
 
 
 class LearnerObservation(BaseModel):

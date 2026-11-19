@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass
 
 from sceneops.simulator.engine import SimulationEngine, SimulationStatus
@@ -83,11 +82,9 @@ class SimulationRunner:
             final_status=self.engine.status,
             triage_counts=triage_counts,
             allocation_count=len(self.engine.allocations)
-                + len(self.engine.transported_patients),
+            + len(self.engine.transported_patients),
             event_count=len(self.engine.events),
-            transported_patient_ids=tuple(
-                sorted(self.engine.transported_patients)
-            ),
+            transported_patient_ids=tuple(sorted(self.engine.transported_patients)),
         )
 
     def _allocate_available_ambulances(self) -> None:

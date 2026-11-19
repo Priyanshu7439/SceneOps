@@ -3,6 +3,7 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
 
 from sceneops.agents.disclosure import (
+    ConversationTurn,
     DisclosureFact,
     DisclosurePacket,
     PatientProfile,
@@ -43,9 +44,8 @@ class DisclosurePolicy:
 class PatientDisclosureRegistry:
     """Stores facts the simulated patient has explicitly disclosed.
 
-    This registry is an application-internal boundary. The dialogue controller
-    should call ``record_answer`` only after receiving the corresponding
-    learner question. It must never be populated from raw model output.
+    Historical records are retained for audit purposes. The packet builder
+    selects the latest record for each fact before sending data to an agent.
     """
 
     def __init__(self) -> None:
@@ -83,7 +83,18 @@ class PatientDisclosureRegistry:
 
 
 class DisclosurePacketBuilder:
-    """Builds a patient packet only from registry-backed disclosures."""
+    """Builds packets using only the latest registry-backed disclosures."""
+
+    @staticmethod
+    def _latest_disclosures(
+        records: list[PatientDisclosureRecord],
+    ) -> list[DisclosureFact]:
+        latest_by_fact: dict[str, DisclosureFact] = {}
+
+        for record in records:
+            latest_by_fact[record.disclosure.fact] = record.disclosure
+
+        return DisclosurePolicy.validate(list(latest_by_fact.values()))
 
     @staticmethod
     def build(
@@ -91,14 +102,13 @@ class DisclosurePacketBuilder:
         *,
         disclosure_registry: PatientDisclosureRegistry,
         disclose_age: bool = False,
+        conversation_memory: list[ConversationTurn] | None = None,
     ) -> DisclosurePacket:
         if not isinstance(disclosure_registry, PatientDisclosureRegistry):
             raise TypeError("disclosure_registry must be a PatientDisclosureRegistry.")
 
         records = disclosure_registry.get_for_patient(patient.patient_id)
-        current_disclosures = DisclosurePolicy.validate(
-            [record.disclosure for record in records]
-        )
+        current_disclosures = DisclosurePacketBuilder._latest_disclosures(records)
 
         profile = PatientProfile(
             age=patient.age if disclose_age else None,
@@ -110,7 +120,5 @@ class DisclosurePacketBuilder:
             patient_id=patient.patient_id,
             profile=profile,
             current_disclosures=current_disclosures,
-            # Conversation memory will be populated by the conversation
-            # controller once turn-level dialogue history is implemented.
-            conversation_memory=[],
+            conversation_memory=conversation_memory or [],
         )

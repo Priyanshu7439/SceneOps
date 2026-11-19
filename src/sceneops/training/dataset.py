@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Literal
@@ -14,7 +13,10 @@ from sceneops.simulator.scenario_factory import (
     create_mass_casualty_scenario,
 )
 
-GENERATOR_VERSION = "1.0.0"
+GENERATOR_VERSION = "2.1.0"
+
+SCENARIO_COUNT = 92
+DEFAULT_SCENARIO_INDICES = tuple(range(1, SCENARIO_COUNT + 1))
 
 PAIN_QUESTIONS = (
     "Are you experiencing any pain? How severe is it?",
@@ -52,97 +54,99 @@ class DatasetExample(BaseModel):
 
     def to_training_record(self) -> dict:
         """Return conversation-only format used by SFT pipelines."""
-        return {
-            "messages": [
-                message.model_dump()
-                for message in self.messages
-            ]
-        }
+        return {"messages": [message.model_dump() for message in self.messages]}
 
 
 class PatientDialogueDatasetGenerator:
-    """Generate controlled dialogue examples from registry-backed disclosures."""
+    """Generate controlled dialogue examples across multiple scenarios."""
 
-    def generate(self) -> list[DatasetExample]:
-        scenario = create_mass_casualty_scenario()
-        registry = PatientDisclosureRegistry()
+    def generate(
+        self,
+        scenario_indices: tuple[int, ...] = DEFAULT_SCENARIO_INDICES,
+    ) -> list[DatasetExample]:
+        if not scenario_indices:
+            raise ValueError("At least one scenario index is required.")
+
+        if len(scenario_indices) != len(set(scenario_indices)):
+            raise ValueError("Scenario indices must be unique.")
 
         examples: list[DatasetExample] = []
 
-        for patient_index, patient in enumerate(scenario.patients):
-            # Deterministic synthetic pain values for dataset diversity.
-            # These values are not clinical estimates or medical inferences.
-            synthetic_pain_level = (patient_index * 3 + 2) % 11
-            patient.update_pain(synthetic_pain_level)
+        for scenario_index in scenario_indices:
+            scenario = create_mass_casualty_scenario(scenario_index)
+            registry = PatientDisclosureRegistry()
 
-            # Record the explicit learner question before building the packet.
-            registry.record_answer(
-                patient,
-                PatientQuestion.PAIN_LEVEL,
-            )
+            for patient_index, patient in enumerate(scenario.patients):
+                # Controlled synthetic variation, not clinical inference.
+                synthetic_pain_level = (patient_index * 3 + scenario_index * 2) % 11
 
-            packet = DisclosurePacketBuilder.build(
-                patient,
-                disclosure_registry=registry,
-            )
+                patient.update_pain(synthetic_pain_level)
 
-            if len(packet.current_disclosures) != 1:
-                raise ValueError(
-                    f"Expected exactly one disclosure for {patient.patient_id}."
+                registry.record_answer(
+                    patient,
+                    PatientQuestion.PAIN_LEVEL,
                 )
 
-            disclosure = packet.current_disclosures[0]
-
-            if disclosure.fact != "reported_pain_level":
-                raise ValueError(
-                    f"Unexpected disclosure fact: {disclosure.fact}"
+                packet = DisclosurePacketBuilder.build(
+                    patient,
+                    disclosure_registry=registry,
                 )
 
-            system_prompt = (
-                "You are roleplaying a patient in a synthetic educational "
-                "mass-casualty simulation. Respond naturally as the patient. "
-                "Use only the information explicitly available in this "
-                "conversation and the authorized disclosure below. "
-                "Do not invent symptoms, measurements, injuries, diagnoses, "
-                "or other medical facts. Do not reveal hidden simulator state. "
-                f"Personality: {packet.profile.personality}. "
-                f"Speech style: {packet.profile.speech_style}. "
-                f"Authorized disclosure: {disclosure.fact} = {disclosure.value}."
-            )
+                if len(packet.current_disclosures) != 1:
+                    raise ValueError(
+                        f"Expected exactly one disclosure for "
+                        f"{patient.patient_id} in {scenario.scenario_id}."
+                    )
 
-            for variation, question in enumerate(PAIN_QUESTIONS):
-                answer = PAIN_RESPONSES[variation].format(
-                    value=disclosure.value
+                disclosure = packet.current_disclosures[0]
+
+                if disclosure.fact != "reported_pain_level":
+                    raise ValueError(f"Unexpected disclosure fact: {disclosure.fact}")
+
+                system_prompt = (
+                    "You are roleplaying a patient in a synthetic educational "
+                    "mass-casualty simulation. Respond naturally as the patient. "
+                    "Use only the information explicitly available in this "
+                    "conversation and the authorized disclosure below. "
+                    "Do not invent symptoms, measurements, injuries, diagnoses, "
+                    "or other medical facts. Do not reveal hidden simulator state. "
+                    f"Personality: {packet.profile.personality}. "
+                    f"Speech style: {packet.profile.speech_style}. "
+                    f"Authorized disclosure: {disclosure.fact} = "
+                    f"{disclosure.value}."
                 )
 
-                example = DatasetExample(
-                    example_id=(
-                        f"{scenario.scenario_id}-"
-                        f"{patient.patient_id}-"
-                        f"pain-{variation + 1:02d}"
-                    ),
-                    scenario_id=scenario.scenario_id,
-                    patient_id=patient.patient_id,
-                    task="patient_dialogue",
-                    generator_version=GENERATOR_VERSION,
-                    disclosure_fact=disclosure.fact,
-                    disclosure_value=disclosure.value,
-                    messages=(
-                        ChatMessage(
-                            role="system",
-                            content=system_prompt,
-                        ),
-                        ChatMessage(
-                            role="user",
-                            content=question,
-                        ),
-                        ChatMessage(
-                            role="assistant",
-                            content=answer,
-                        ),
-                    ),
-                )
+                for variation, question in enumerate(PAIN_QUESTIONS):
+                    answer = PAIN_RESPONSES[variation].format(value=disclosure.value)
 
-                examples.append(example)
+                    examples.append(
+                        DatasetExample(
+                            example_id=(
+                                f"{scenario.scenario_id}-"
+                                f"{patient.patient_id}-"
+                                f"pain-{variation + 1:02d}"
+                            ),
+                            scenario_id=scenario.scenario_id,
+                            patient_id=patient.patient_id,
+                            task="patient_dialogue",
+                            generator_version=GENERATOR_VERSION,
+                            disclosure_fact=disclosure.fact,
+                            disclosure_value=disclosure.value,
+                            messages=(
+                                ChatMessage(
+                                    role="system",
+                                    content=system_prompt,
+                                ),
+                                ChatMessage(
+                                    role="user",
+                                    content=question,
+                                ),
+                                ChatMessage(
+                                    role="assistant",
+                                    content=answer,
+                                ),
+                            ),
+                        )
+                    )
 
         return examples

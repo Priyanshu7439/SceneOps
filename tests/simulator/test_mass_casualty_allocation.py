@@ -1,4 +1,3 @@
-
 from sceneops.simulator.scenario_builder import ScenarioBuilder
 from sceneops.simulator.scenario_factory import (
     create_mass_casualty_scenario,
@@ -20,15 +19,10 @@ def create_assessed_engine():
 def test_only_five_patients_receive_ambulances():
     engine = create_assessed_engine()
 
-    allocations = [
-        engine.allocate_next_patient()
-        for _ in range(5)
-    ]
+    allocations = [engine.allocate_next_patient() for _ in range(5)]
 
     successful_allocations = [
-        allocation
-        for allocation in allocations
-        if allocation is not None
+        allocation for allocation in allocations if allocation is not None
     ]
 
     assert len(successful_allocations) == 5
@@ -56,8 +50,7 @@ def test_black_and_pending_patients_are_not_allocated():
             allocated_patient_ids.add(result.patient_id)
 
     assert not allocated_patient_ids.intersection(
-        {"P013", "P014", "P015", "P016",
-         "P017", "P018", "P019", "P020"}
+        {"P013", "P014", "P015", "P016", "P017", "P018", "P019", "P020"}
     )
 
 

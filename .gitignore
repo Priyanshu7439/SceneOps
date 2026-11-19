@@ -33,3 +33,17 @@ mlruns/
 # OS
 .DS_Store
 Thumbs.db
+
+# Debug artifacts
+debug_output/
+pytest_errors.txt
+
+# Track validated narration dataset only
+!data/processed/sceneops_narration_master.jsonl
+!data/processed/sceneops_narration_train.jsonl
+!data/processed/sceneops_narration_validation.jsonl
+!data/processed/sceneops_narration_test.jsonl
+!data/processed/sceneops_narration_manifest.json
+
+# Ignore generated package metadata
+src/sceneops.egg-info/

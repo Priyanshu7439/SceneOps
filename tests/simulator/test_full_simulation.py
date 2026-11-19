@@ -1,4 +1,3 @@
-
 from sceneops.simulator.deterioration import (
     DeteriorationEvent,
     PatientChanges,

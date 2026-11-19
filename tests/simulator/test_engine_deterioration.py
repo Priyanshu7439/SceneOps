@@ -1,4 +1,3 @@
-
 import pytest
 
 from sceneops.simulator.deterioration import (
@@ -95,17 +94,23 @@ def test_deterioration_event_is_not_applied_twice():
     engine.start()
 
     engine.advance_time(60)
-    event_count = len([
-        event for event in engine.events
-        if event.event_type == "patient_state_changed"
-    ])
+    event_count = len(
+        [
+            event
+            for event in engine.events
+            if event.event_type == "patient_state_changed"
+        ]
+    )
 
     engine.advance_time(60)
 
-    updated_event_count = len([
-        event for event in engine.events
-        if event.event_type == "patient_state_changed"
-    ])
+    updated_event_count = len(
+        [
+            event
+            for event in engine.events
+            if event.event_type == "patient_state_changed"
+        ]
+    )
 
     assert event_count == 1
     assert updated_event_count == 1

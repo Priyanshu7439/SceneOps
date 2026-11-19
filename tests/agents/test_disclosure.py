@@ -1,5 +1,6 @@
 import pytest
 
+from sceneops.agents.disclosure import DisclosureFact
 from sceneops.agents.disclosure_rules import (
     DisclosurePacketBuilder,
     PatientDisclosureRegistry,
@@ -57,9 +58,7 @@ def test_packet_contains_only_registry_backed_disclosures():
         disclosure_registry=registry,
     )
 
-    assert [fact.fact for fact in packet.current_disclosures] == [
-        "reported_pain_level"
-    ]
+    assert [fact.fact for fact in packet.current_disclosures] == ["reported_pain_level"]
     assert packet.current_disclosures[0].value == "7/10"
 
 
@@ -127,3 +126,102 @@ def test_builder_rejects_non_registry_input():
             patient,
             disclosure_registry=[],
         )
+
+
+from sceneops.agents.disclosure import ConversationTurn
+
+
+def test_packet_contains_supplied_conversation_history():
+    patient = make_patient()
+    registry = PatientDisclosureRegistry()
+
+    history = [
+        ConversationTurn(
+            user_message="How are you feeling?",
+            patient_response="I feel scared.",
+        ),
+        ConversationTurn(
+            user_message="Are you in pain?",
+            patient_response="Yes, my leg hurts.",
+        ),
+    ]
+
+    packet = DisclosurePacketBuilder.build(
+        patient,
+        disclosure_registry=registry,
+        conversation_memory=history,
+    )
+
+    assert packet.conversation_memory == history
+    assert len(packet.conversation_memory) == 2
+
+
+def test_packet_defaults_to_empty_conversation_history():
+    patient = make_patient()
+    registry = PatientDisclosureRegistry()
+
+    packet = DisclosurePacketBuilder.build(
+        patient,
+        disclosure_registry=registry,
+    )
+
+    assert packet.conversation_memory == []
+
+
+def test_conversation_history_is_separate_from_trusted_disclosures():
+    patient = make_patient()
+    registry = PatientDisclosureRegistry()
+
+    history = [
+        ConversationTurn(
+            user_message="What is your respiratory rate?",
+            patient_response="I don't know.",
+        )
+    ]
+
+    packet = DisclosurePacketBuilder.build(
+        patient,
+        disclosure_registry=registry,
+        conversation_memory=history,
+    )
+
+    assert packet.conversation_memory == history
+    assert packet.current_disclosures == []
+
+
+def test_packet_uses_latest_disclosure_but_registry_preserves_history():
+    patient = make_patient()
+    registry = PatientDisclosureRegistry()
+
+    registry.record_answer(patient, PatientQuestion.PAIN_LEVEL)
+
+    patient.update_pain(9)
+    registry.record_answer(patient, PatientQuestion.PAIN_LEVEL)
+
+    packet = DisclosurePacketBuilder.build(
+        patient,
+        disclosure_registry=registry,
+    )
+
+    records = registry.get_for_patient("P001")
+
+    assert len(records) == 2
+    assert [record.disclosure.value for record in records] == ["7/10", "9/10"]
+
+    assert len(packet.current_disclosures) == 1
+    assert packet.current_disclosures[0].value == "9/10"
+
+
+def test_disclosure_policy_rejects_unauthorized_facts():
+    from sceneops.agents.disclosure_rules import DisclosurePolicy
+
+    unauthorized_fact = DisclosureFact(
+        fact="respiratory_rate",
+        value="37",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Disclosure policy rejected unauthorized facts",
+    ):
+        DisclosurePolicy.validate([unauthorized_fact])

@@ -24,7 +24,9 @@ async def test_backend_sends_openai_compatible_chat_request():
         client=client,
     )
 
-    result = await backend.generate(system_prompt="Act as patient", user_prompt="What happened?")
+    result = await backend.generate(
+        system_prompt="Act as patient", user_prompt="What happened?"
+    )
 
     assert result == "I am hurt."
     assert seen["url"] == "http://test/v1/chat/completions"

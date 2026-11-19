@@ -1,4 +1,3 @@
-
 from sceneops.simulator.engine import SimulationEngine
 from sceneops.simulator.scenario import ScenarioDefinition
 

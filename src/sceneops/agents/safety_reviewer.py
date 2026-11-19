@@ -9,38 +9,154 @@ from sceneops.agents.contracts import (
 
 
 class RuleBasedSafetyReviewer:
-    """Conservative baseline reviewer; not a clinical-grade safety classifier.
+    """Conservative baseline reviewer, not a clinical-grade classifier.
 
-    It blocks explicit diagnosis/treatment language and common unsupported
-    vital-sign claims. A later model-backed evaluator can supplement this
-    deterministic baseline, but must not replace simulator-side controls.
+    Only current simulator-approved disclosures and scene facts are
+    treated as evidence. Generated conversation history is never
+    treated as verified fact.
     """
 
-    _UNSAFE_PHRASES = (
-        "you have a heart attack",
-        "you are having a heart attack",
-        "you have internal bleeding",
-        "you have a spinal injury",
-        "your diagnosis is",
-        "you should take medication",
-        "take this medication",
-        "administer medication",
-        "give them medication",
-        "perform surgery",
-        "intubate the patient",
-        "your triage category is",
-        "you are red-tagged",
-        "you are yellow-tagged",
-        "you are green-tagged",
-        "you are black-tagged",
+    _UNSAFE_PATTERNS = (
+        re.compile(
+            r"\b(?:heart attack|internal bleeding|spinal injury)\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\bdiagnos(?:is|ed|ing)\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:take|administer|give)\b.{0,50}\bmedication\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:perform surgery|intubat(?:e|ion)|triage category)\b",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"\b(?:red|yellow|green|black)[ -]tagged\b",
+            re.IGNORECASE,
+        ),
     )
+
     _VITAL_PATTERNS = (
-        re.compile(r"\b(?:respiratory rate|breathing rate)\s*(?:is|of|:)?\s*\d+", re.IGNORECASE),
-        re.compile(r"\b\d+\s*(?:breaths per minute|bpm)\b", re.IGNORECASE),
-        re.compile(r"\b(?:blood pressure|bp)\s*(?:is|of|:)?\s*\d{2,3}\s*/\s*\d{2,3}", re.IGNORECASE),
-        re.compile(r"\b(?:oxygen saturation|spo2)\s*(?:is|of|:)?\s*\d{1,3}\s*%", re.IGNORECASE),
-        re.compile(r"\b(?:capillary refill)\s*(?:is|of|:)?\s*\d+(?:\.\d+)?\s*(?:seconds|secs|s)\b", re.IGNORECASE),
+        (
+            "respiratory_rate",
+            re.compile(
+                r"\b(?:respiratory rate|breathing rate)\s*"
+                r"(?:is|of|:)?\s*(\d+)\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "respiratory_rate",
+            re.compile(
+                r"\b(\d+)\s*(?:breaths per minute|bpm)\b",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "blood_pressure",
+            re.compile(
+                r"\b(?:blood pressure|bp)\s*"
+                r"(?:is|of|:)?\s*(\d{2,3}\s*/\s*\d{2,3})",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "oxygen_saturation",
+            re.compile(
+                r"\b(?:oxygen saturation|spo2)\s*"
+                r"(?:is|of|:)?\s*(\d{1,3})\s*%",
+                re.IGNORECASE,
+            ),
+        ),
+        (
+            "capillary_refill",
+            re.compile(
+                r"\bcapillary refill\s*(?:is|of|:)?\s*"
+                r"(\d+(?:\.\d+)?)\s*(?:seconds|secs|s)\b",
+                re.IGNORECASE,
+            ),
+        ),
     )
+
+    _PATIENT_ID_PATTERN = re.compile(
+        r"\b(P[A-Za-z0-9_-]{0,63})\b",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _normalize_value(value: str) -> str:
+        return re.sub(r"\s+", "", value).casefold()
+
+    @classmethod
+    def _scene_evidence(cls, request: AgentRequest) -> dict:
+        evidence = {}
+
+        for fact in request.scene_facts:
+            match = re.fullmatch(
+                r"patient_observation:"
+                r"([A-Za-z0-9_-]{1,64}):"
+                r"([a-z_]+)",
+                fact.fact,
+            )
+
+            if match is None:
+                continue
+
+            patient_id, observation_type = match.groups()
+
+            value_match = re.fullmatch(
+                r"(.+?)\s+\(observed at simulation second \d+\)",
+                fact.value,
+            )
+
+            if value_match is None:
+                continue
+
+            key = (patient_id.casefold(), observation_type)
+            evidence[key] = cls._normalize_value(value_match.group(1))
+
+        return evidence
+
+    @classmethod
+    def _review_scene_measurements(
+        cls,
+        request: AgentRequest,
+        response: AgentResponse,
+    ) -> list[str]:
+        evidence = cls._scene_evidence(request)
+        reasons = []
+
+        for observation_type, pattern in cls._VITAL_PATTERNS:
+            for match in pattern.finditer(response.content):
+                claimed_value = cls._normalize_value(match.group(1))
+
+                preceding_text = response.content[
+                    max(0, match.start() - 80) : match.start()
+                ]
+
+                patient_matches = list(cls._PATIENT_ID_PATTERN.finditer(preceding_text))
+
+                if not patient_matches:
+                    reasons.append(
+                        "Scene narration contains a clinical measurement "
+                        "without an identifiable patient."
+                    )
+                    continue
+
+                patient_id = patient_matches[-1].group(1).casefold()
+                approved_value = evidence.get((patient_id, observation_type))
+
+                if approved_value is None or claimed_value != approved_value:
+                    reasons.append(
+                        "Scene narration contains a clinical measurement "
+                        "that does not match the approved observation "
+                        "for that patient."
+                    )
+
+        return reasons
 
     async def review(
         self,
@@ -48,26 +164,52 @@ class RuleBasedSafetyReviewer:
         response: AgentResponse,
     ) -> SafetyReview:
         reasons: list[str] = []
+
+        if response.task != request.task:
+            return SafetyReview(
+                approved=False,
+                reasons=("Response task does not match request task.",),
+            )
+
         text = response.content.casefold()
 
-        for phrase in self._UNSAFE_PHRASES:
-            if phrase in text:
-                reasons.append("Response contains diagnosis, treatment, or triage instruction language.")
+        for pattern in self._UNSAFE_PATTERNS:
+            if pattern.search(text):
+                reasons.append(
+                    "Response contains diagnosis, treatment, or triage "
+                    "decision language."
+                )
                 break
 
-        if request.task == AgentTask.PATIENT_DIALOGUE and request.patient_packet is not None:
-            disclosed_text = " ".join(
-                [
-                    *(fact.value for fact in request.patient_packet.current_disclosures),
-                    *(fact.value for fact in request.patient_packet.conversation_memory),
-                ]
-            ).casefold()
-            for pattern in self._VITAL_PATTERNS:
-                for match in pattern.finditer(response.content):
-                    if match.group(0).casefold() not in disclosed_text:
-                        reasons.append("Response appears to introduce an undisclosed clinical measurement.")
-                        break
-                if reasons and reasons[-1].startswith("Response appears"):
-                    break
+        if request.task == AgentTask.PATIENT_DIALOGUE:
+            packet = request.patient_packet
 
-        return SafetyReview(approved=not reasons, reasons=tuple(reasons))
+            if packet is not None:
+                disclosed_text = " ".join(
+                    fact.value for fact in packet.current_disclosures
+                ).casefold()
+
+                for _, pattern in self._VITAL_PATTERNS:
+                    for match in pattern.finditer(response.content):
+                        claimed_value = self._normalize_value(match.group(1))
+
+                        if claimed_value not in self._normalize_value(disclosed_text):
+                            reasons.append(
+                                "Response appears to introduce an "
+                                "undisclosed clinical measurement."
+                            )
+                            break
+
+                    if any(
+                        reason.startswith("Response appears to introduce")
+                        for reason in reasons
+                    ):
+                        break
+
+        elif request.task == AgentTask.SCENE_NARRATION:
+            reasons.extend(self._review_scene_measurements(request, response))
+
+        return SafetyReview(
+            approved=not reasons,
+            reasons=tuple(reasons),
+        )
