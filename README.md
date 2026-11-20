@@ -2,11 +2,11 @@
 
 **An AI-assisted mass-casualty incident simulation platform combining a deterministic simulation engine with fine-tuned language models for structured scene narration.**
 
-GPU + environment details:
-<img width="275" height="748" alt="Screenshot 2026-11-19 194556" src="https://github.com/user-attachments/assets/ec0e32a4-38e6-4d08-82c9-a944b6e8c514" />
-
 Adapter loading:
 <img width="1122" height="620" alt="Screenshot 2026-11-19 194725" src="https://github.com/user-attachments/assets/e6ba23d7-fef7-4dce-a72a-b201ba07d117" />
+
+Training completion:
+<img width="842" height="427" alt="Screenshot 2026-11-20 141922" src="https://github.com/user-attachments/assets/c0461018-3446-4ebb-98cb-8375f90cd112" />
 
 Scene narration output:
 <img width="1112" height="357" alt="Screenshot 2026-11-19 193624" src="https://github.com/user-attachments/assets/eedfccd9-3b6f-49bb-8407-674c366ab1db" />
@@ -14,8 +14,15 @@ Scene narration output:
 Temporal narration output
 <img width="1127" height="417" alt="Screenshot 2026-11-19 193746" src="https://github.com/user-attachments/assets/349424b4-2339-4812-b86c-55be9e086074" />
 
+Dataset composition graph:
+<img width="1217" height="435" alt="Screenshot 2026-11-20 142439" src="https://github.com/user-attachments/assets/3b2f2acd-a947-4851-8f11-1c5bb62f7bbc" />
+
 Held-out test — EXACT MATCH: True
 <img width="1113" height="172" alt="Screenshot 2026-11-19 194338" src="https://github.com/user-attachments/assets/bf4cf1cc-ef3f-43a3-858f-187594d896a9" />
+
+Temporal narration graph:
+<img width="1122" height="635" alt="Screenshot 2026-11-20 142459" src="https://github.com/user-attachments/assets/58fa85e5-95ed-4314-a53a-ca58521a69fd" />
+
 
 
 ---
