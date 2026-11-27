@@ -16,6 +16,11 @@ The system combines a deterministic Python simulation engine with specialized LL
 
 ## Screenshots
 
+FULL WORKING ARCHITECTURE:
+
+<img width="1672" height="941" alt="SceneOps AI Mass-Casualty Simulation Architecture" src="https://github.com/user-attachments/assets/63e7654c-dd71-4083-9b9b-07f06f4d7234" />
+
+
 Dashboard:
 
 <img width="1897" height="910" alt="Screenshot 2026-11-27 172316" src="https://github.com/user-attachments/assets/2a6fde70-ba78-4588-a105-22809439f547" />
