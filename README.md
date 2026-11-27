@@ -1,9 +1,8 @@
 # SceneOps
 
-SceneOps is an educational synthetic mass-casualty incident simulator with AI-assisted scene and temporal narration.
+SceneOps is an AI-assisted mass-casualty incident simulation platform designed to train users in managing complex, time-sensitive emergency scenarios involving multiple patients, changing observations, limited resources and ambulance allocation.
 
-The learner manages simulated patients, authorized observations, deterioration, limited ambulances, transport, and time pressure. The Python simulator is the source of truth. The language model generates narration only from simulator-approved disclosures.
-
+The system combines a deterministic Python simulation engine with specialized LLM-based narration agents. Its defining architectural principle is that the simulator remains the single source of truth, while the LLM is restricted to generating natural-language scene narration and temporal narration from authorized observations.
 
 > **Safety boundary:** SceneOps is not a clinically validated diagnostic, treatment, triage, or emergency-response system.
 
