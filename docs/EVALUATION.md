@@ -13,3 +13,9 @@ Fine-tuned wins/losses/ties were 215/966/0 overall, 0/562/0 scene, and 215/404/0
 The independent state-fidelity report records 1,181/1,181 under a closed-grammar evaluator using regenerated simulator observations. It checks identity, timestamps, coverage, and values; it does not establish clinical safety or broad free-form understanding.
 
 The older artifacts/evaluation/gguf_final output contains target leakage and is excluded from conclusions.
+
+## Interpreting the results
+
+The blind evaluator used identical held-out examples, dataset identity, generation settings, and prompt construction for both endpoints. Completed generations were counted rather than silently discarded. The fine-tuned model's negative overall and scene deltas are therefore a real lexical regression in this preserved experiment, not a claim of successful fine-tuning. Temporal F1 changed only marginally.
+
+The state-fidelity result is deliberately narrower: its closed grammar compares authorized simulator-derived fields, identities, timestamps, coverage, and values. It is useful as a deterministic boundary check, but it does not evaluate unrestricted prose, clinical reasoning, or real-world patient safety.

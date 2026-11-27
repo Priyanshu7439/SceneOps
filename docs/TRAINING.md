@@ -13,3 +13,9 @@ Recorded configuration:
 The notebook audit is historical evidence. The original checkpoint and complete environment are not present here, so this is not claimed as a fully reproducible local training run. No retraining is performed.
 
 configs/axolotl_sceneops_lora.yml is an optional structurally validated reference configuration. It was not used for historical training and has not been executed.
+
+## What each training component did
+
+Transformers supplied the model and tokenizer integration. bitsandbytes loaded the base model in 4-bit NF4 form to reduce memory pressure. PEFT defined the trainable low-rank adapters, while TRL's supervised fine-tuning trainer ran the historical optimization loop. These components are recorded from the historical notebook/configuration evidence; the original checkpoint and full training environment are not available for a fresh reproducibility claim.
+
+The resulting adapter was historically merged into a standalone model and converted into deployment-oriented AWQ and GGUF artifacts. Those conversion steps are evidence of the artifact pipeline, not evidence that the fine-tuned model improved blind evaluation: the preserved blind results show lower overall and scene token F1 than the base model.

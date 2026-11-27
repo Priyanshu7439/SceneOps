@@ -20,3 +20,9 @@ src/sceneops/serving/vllm_backend.py is an OpenAI-compatible client. A standard 
 src/sceneops/serving/ray_serve_app.py provides health and generation routes, validation, timeout/error handling, and an injectable generator. Mocked health, failure, and timeout tests pass. Live model loading and inference remain unverified.
 
 GGUF is intended for llama.cpp-compatible serving; merged Hugging Face is the candidate format for vLLM or Transformers; AWQ compatibility must be checked in the target environment.
+
+## Request path and failure isolation
+
+The application calls the provider through `src/sceneops/serving/vllm_backend.py`, which discovers the configured model, sends an OpenAI-compatible chat request, validates the response schema, and maps connection, HTTP, timeout, and malformed-response failures to safe application errors. The simulator state is not updated by this path. The Ray Serve adapter exposes the same conceptual health/generation boundary but is independently deployable and has not been represented as a verified production cluster.
+
+The local evidence supports llama.cpp/GGUF inference. A vLLM deployment should use a compatible merged Hugging Face model directory when one is available; the presence of a GGUF file alone is not treated as vLLM compatibility.
