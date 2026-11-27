@@ -93,6 +93,8 @@ flowchart LR
     REVIEW --> API
 ```
 
+DEFINED ARCHITECTURES ARE IN docs/system overview. KINDLY CHECK DOCS FOLDER.
+
 ### Responsibility boundary
 
 | Python simulator owns | LLM may do |
