@@ -71,10 +71,25 @@ def test_rejects_invalid_config_type():
         create_hybrid_scenario("invalid")
 
 
-def test_existing_factory_remains_unchanged():
+def test_existing_factory_includes_three_deterioration_events():
     scenario = create_mass_casualty_scenario(1)
 
     assert scenario.scenario_id == "MCI-001"
     assert len(scenario.patients) == 20
     assert len(scenario.ambulances) == 5
-    assert len(scenario.deterioration_events) == 2
+    assert len(scenario.deterioration_events) == 3
+    assert [event.event_id for event in scenario.deterioration_events] == [
+        "EV001",
+        "EV002",
+        "EV003",
+    ]
+    assert [event.patient_id for event in scenario.deterioration_events] == [
+        "P005",
+        "P006",
+        "P011",
+    ]
+    assert [event.at_seconds for event in scenario.deterioration_events] == [
+        120,
+        240,
+        360,
+    ]

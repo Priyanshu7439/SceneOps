@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from sceneops.agents.conversation_controller import (
     PatientConversationController,
@@ -13,14 +14,19 @@ from sceneops.agents.orchestrator import AgentOrchestrator
 from sceneops.agents.patient_dialogue import PatientDialogueAgent
 from sceneops.agents.safety_reviewer import RuleBasedSafetyReviewer
 from sceneops.agents.scene_narration import SceneNarrationAgent
+from sceneops.agents.temporal_scene_narration import TemporalSceneNarrationAgent
 from sceneops.api.schemas import (
     AdvanceTimeRequest,
+    AllocationResponse,
+    AmbulanceListResponse,
     ClockResponse,
     CreateSessionRequest,
     CreateSessionResponse,
     MessageResponse,
+    PatientAssessmentResponse,
     PatientDialogueRequest,
     PatientDialogueResponse,
+    PatientListResponse,
     PatientObservationRequest,
     PatientObservationResponse,
     PatientQuestionRequest,
@@ -28,6 +34,11 @@ from sceneops.api.schemas import (
     SceneNarrationRequest,
     SceneNarrationResponse,
     SessionSnapshotResponse,
+    SimulationEventListResponse,
+    StartTransportRequest,
+    TemporalSceneNarrationRequest,
+    TemporalSceneNarrationResponse,
+    TransportResponse,
 )
 from sceneops.api.session_manager import SimulationSessionManager
 from sceneops.application.service import SceneOpsApplicationService
@@ -55,16 +66,30 @@ def create_app(
         lifespan=lifespan,
     )
 
+    cors_origins = [
+        origin.strip()
+        for origin in os.getenv("SCENEOPS_CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    ]
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=False,
+            allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Authorization"],
+        )
+
     manager = session_manager or SimulationSessionManager()
     app.state.session_manager = manager
 
     vllm_base_url = os.getenv(
         "SCENEOPS_VLLM_BASE_URL",
-        "http://localhost:8000/v1",
+        "http://127.0.0.1:8081/v1",
     )
     vllm_model = os.getenv(
         "SCENEOPS_VLLM_MODEL",
-        "local-model",
+        "auto",
     )
     vllm_api_key = os.getenv("SCENEOPS_VLLM_API_KEY")
 
@@ -96,6 +121,7 @@ def create_app(
             base_url=vllm_base_url,
             model=vllm_model,
             api_key=vllm_api_key,
+            auto_discover_model=vllm_model in {"auto", "sceneops", "local-model"},
             client=app.state.http_client,
         )
 
@@ -108,6 +134,7 @@ def create_app(
         scene_orchestrator = AgentOrchestrator(
             patient_agent=PatientDialogueAgent(backend),
             scene_agent=SceneNarrationAgent(backend),
+            temporal_scene_agent=TemporalSceneNarrationAgent(backend),
             safety_reviewer=RuleBasedSafetyReviewer(),
         )
 
@@ -143,6 +170,36 @@ def create_app(
             **snapshot,
         )
 
+    @app.get(
+        "/sessions/{session_id}/patients",
+        response_model=PatientListResponse,
+    )
+    def get_patients(session_id: str) -> PatientListResponse:
+        service = get_service(session_id)
+
+        return PatientListResponse(
+            patients=service.get_patient_dashboard()
+        )
+
+    @app.get(
+        "/sessions/{session_id}/resources",
+        response_model=AmbulanceListResponse,
+    )
+    def get_resources(session_id: str) -> AmbulanceListResponse:
+        service = get_service(session_id)
+        return AmbulanceListResponse(
+            ambulances=service.get_resource_dashboard()
+        )
+
+    @app.get(
+        "/sessions/{session_id}/events",
+        response_model=SimulationEventListResponse,
+    )
+    def get_events(session_id: str) -> SimulationEventListResponse:
+        service = get_service(session_id)
+        return SimulationEventListResponse(
+            events=service.get_event_timeline()
+        )
     @app.post(
         "/sessions/{session_id}/start",
         response_model=MessageResponse,
@@ -251,6 +308,95 @@ def create_app(
         )
 
     @app.post(
+        "/sessions/{session_id}/patients/{patient_id}/assessment",
+        response_model=PatientAssessmentResponse,
+    )
+    async def assess_patient(
+        session_id: str,
+        patient_id: str,
+    ) -> PatientAssessmentResponse:
+        service = get_service(session_id)
+
+        try:
+            result = service.assess_patient(patient_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        return PatientAssessmentResponse(
+            patient_id=result.patient_id,
+            category=result.category.value,
+            reason=result.reason,
+            criteria=list(result.criteria),
+        )
+
+    @app.post(
+        "/sessions/{session_id}/patients/{patient_id}/allocation",
+        response_model=AllocationResponse,
+    )
+    async def allocate_patient(
+        session_id: str,
+        patient_id: str,
+    ) -> AllocationResponse:
+        service = get_service(session_id)
+
+        try:
+            result = service.allocate_patient(patient_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        if result is None:
+            raise HTTPException(
+                status_code=409,
+                detail="No eligible available ambulance.",
+            )
+
+        return AllocationResponse(
+            patient_id=result.patient_id,
+            ambulance_id=result.ambulance_id,
+            triage_category=result.triage_category.value,
+            reason=result.reason,
+        )
+
+    @app.post(
+        "/sessions/{session_id}/patients/{patient_id}/transport",
+        response_model=TransportResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def start_patient_transport(
+        session_id: str,
+        patient_id: str,
+        request: StartTransportRequest,
+    ) -> TransportResponse:
+        service = get_service(session_id)
+
+        try:
+            record = service.start_transport(
+                patient_id,
+                request.travel_duration_seconds,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        return TransportResponse(
+            transport_id=record.transport_id,
+            patient_id=record.patient_id,
+            ambulance_id=record.ambulance_id,
+            started_at_seconds=record.started_at_seconds,
+            travel_duration_seconds=record.travel_duration_seconds,
+            completed_at_seconds=record.completed_at_seconds,
+            status=record.status.value,
+        )
+    @app.post(
         "/sessions/{session_id}/patients/{patient_id}/dialogue",
         response_model=PatientDialogueResponse,
     )
@@ -354,6 +500,40 @@ def create_app(
             ) from exc
 
         return SceneNarrationResponse(
+            agent_name=response.agent_name,
+            content=response.content,
+        )
+
+
+    @app.post(
+        "/sessions/{session_id}/temporal-narration",
+        response_model=TemporalSceneNarrationResponse,
+    )
+    async def narrate_temporal_scene(
+        session_id: str,
+        request: TemporalSceneNarrationRequest,
+    ) -> TemporalSceneNarrationResponse:
+        service = get_service(session_id)
+
+        try:
+            response = await service.narrate_temporal_scene(request.message)
+        except VLLMBackendError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from exc
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+
+        return TemporalSceneNarrationResponse(
             agent_name=response.agent_name,
             content=response.content,
         )

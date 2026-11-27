@@ -70,6 +70,34 @@ class MessageResponse(BaseModel):
     message: str
     status: str
 
+class PatientAssessmentResponse(BaseModel):
+    patient_id: str
+    category: str
+    reason: str
+    criteria: list[str]
+
+
+class AllocationResponse(BaseModel):
+    patient_id: str
+    ambulance_id: str
+    triage_category: str
+    reason: str
+
+
+class StartTransportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    travel_duration_seconds: int = Field(default=300, ge=1)
+
+
+class TransportResponse(BaseModel):
+    transport_id: str
+    patient_id: str
+    ambulance_id: str
+    started_at_seconds: int
+    travel_duration_seconds: int
+    completed_at_seconds: int | None = None
+    status: str
 
 class PatientObservationRequest(BaseModel):
     """Request to observe a patient during a running simulation."""
@@ -101,3 +129,48 @@ class SceneNarrationResponse(BaseModel):
 
     agent_name: str
     content: str
+
+
+class TemporalSceneNarrationRequest(BaseModel):
+    """Learner request for timestamped observation-history narration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class TemporalSceneNarrationResponse(BaseModel):
+    """Safety-reviewed temporal scene narration."""
+
+    agent_name: str
+    content: str
+class PatientDashboardItem(BaseModel):
+    patient_id: str
+    assessment_status: str
+    triage_category: str
+    ambulance_id: str | None = None
+    transport_status: str
+
+
+class PatientListResponse(BaseModel):
+    patients: list[PatientDashboardItem]
+
+class AmbulanceDashboardItem(BaseModel):
+    ambulance_id: str
+    status: str
+    assigned_patient_id: str | None = None
+
+
+class AmbulanceListResponse(BaseModel):
+    ambulances: list[AmbulanceDashboardItem]
+
+
+class SimulationEventItem(BaseModel):
+    event_type: str
+    simulation_second: int
+    description: str
+    patient_id: str | None = None
+
+
+class SimulationEventListResponse(BaseModel):
+    events: list[SimulationEventItem]

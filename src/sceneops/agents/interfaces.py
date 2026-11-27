@@ -14,6 +14,10 @@ class SceneNarrationAgent(Protocol):
 
     async def generate(self, request: AgentRequest) -> AgentResponse: ...
 
+class TemporalSceneNarrationAgent(Protocol):
+    """Narrates timestamped observations without inferring unobserved changes."""
+
+    async def generate(self, request: AgentRequest) -> AgentResponse: ...
 
 class SafetyReviewer(Protocol):
     """Reviews generated text before it is returned to the application."""

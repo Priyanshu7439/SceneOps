@@ -7,6 +7,7 @@ from sceneops.agents.contracts import (
     AgentResponse,
     AgentTask,
     SceneFact,
+    TemporalObservation,
 )
 from sceneops.agents.disclosure import (
     DisclosureFact,
@@ -16,6 +17,7 @@ from sceneops.agents.disclosure import (
 from sceneops.agents.patient_dialogue import PatientDialogueAgent
 from sceneops.agents.safety_reviewer import RuleBasedSafetyReviewer
 from sceneops.agents.scene_narration import SceneNarrationAgent
+from sceneops.agents.temporal_scene_narration import TemporalSceneNarrationAgent
 
 
 class StubBackend:
@@ -237,3 +239,80 @@ def test_scene_agent_currently_allows_unsupported_diagnosis():
 
     # Documents the current gap: scene output is not independently reviewed.
     assert "internal bleeding" in response.content.casefold()
+
+def make_temporal_request() -> AgentRequest:
+    return AgentRequest(
+        task=AgentTask.TEMPORAL_SCENE_NARRATION,
+        user_message="Describe the recorded changes over time.",
+        temporal_observations=(
+            TemporalObservation(
+                patient_id="P001",
+                observation_type="respiratory_rate",
+                value="20",
+                observed_at_seconds=0,
+            ),
+            TemporalObservation(
+                patient_id="P001",
+                observation_type="respiratory_rate",
+                value="24",
+                observed_at_seconds=60,
+            ),
+            TemporalObservation(
+                patient_id="P002",
+                observation_type="mental_status",
+                value="alert",
+                observed_at_seconds=60,
+            ),
+        ),
+    )
+
+
+def test_temporal_agent_includes_all_timestamped_observations():
+    backend = StubBackend("Recorded observations show two readings.")
+    agent = TemporalSceneNarrationAgent(backend)
+
+    response = asyncio.run(agent.generate(make_temporal_request()))
+
+    assert "Simulation second 0" in backend.system_prompt
+    assert "Simulation second 60" in backend.system_prompt
+    assert "P001" in backend.system_prompt
+    assert "P002" in backend.system_prompt
+    assert "respiratory_rate = 20" in backend.system_prompt
+    assert "respiratory_rate = 24" in backend.system_prompt
+    assert "mental_status = alert" in backend.system_prompt
+    assert response.task == AgentTask.TEMPORAL_SCENE_NARRATION
+    assert response.agent_name == "temporal_scene_narration_agent"
+
+
+def test_temporal_agent_preserves_chronological_observation_order():
+    backend = StubBackend("Recorded observations show changes.")
+    agent = TemporalSceneNarrationAgent(backend)
+
+    asyncio.run(agent.generate(make_temporal_request()))
+
+    first = backend.system_prompt.index("Simulation second 0")
+    second = backend.system_prompt.index("Simulation second 60")
+
+    assert first < second
+
+
+def test_temporal_agent_rejects_wrong_task():
+    agent = TemporalSceneNarrationAgent(StubBackend())
+    request = AgentRequest(
+        task=AgentTask.SCENE_NARRATION,
+        user_message="Describe the scene.",
+        scene_facts=(SceneFact(fact="weather", value="rainy"),),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="only accepts temporal_scene_narration",
+    ):
+        asyncio.run(agent.generate(request))
+
+
+def test_temporal_agent_rejects_empty_backend_response():
+    agent = TemporalSceneNarrationAgent(StubBackend("   "))
+
+    with pytest.raises(ValueError, match="empty response"):
+        asyncio.run(agent.generate(make_temporal_request()))

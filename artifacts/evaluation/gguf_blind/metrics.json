@@ -1,0 +1,39 @@
+{
+  "completed_examples": 1181,
+  "failed_examples": 0,
+  "overall": {
+    "examples": 1181,
+    "exact_match": 0.0,
+    "token_precision": 0.5908404935751204,
+    "token_recall": 0.47025851128230317,
+    "token_f1": 0.5043649728150417,
+    "sequence_similarity": 0.2792662927173309
+  },
+  "by_task": {
+    "scene": {
+      "examples": 562,
+      "exact_match": 0.0,
+      "token_precision": 0.5273239491445701,
+      "token_recall": 0.608493154789459,
+      "token_f1": 0.5649590387797951,
+      "sequence_similarity": 0.4272838824153278
+    },
+    "temporal": {
+      "examples": 619,
+      "exact_match": 0.0,
+      "token_precision": 0.6485081801178816,
+      "token_recall": 0.34475306758113744,
+      "token_f1": 0.44935065121214773,
+      "sequence_similarity": 0.14487875570557934
+    }
+  },
+  "dataset_sha256": "20678f5909fd531805ef0f4da152108ca917c67ff4104d87d682cb718441e89a",
+  "model": "/mnt/d/Desktop/SceneOps_models/gguf/sceneops-q4_k_m.gguf",
+  "generation": {
+    "temperature": 0.0,
+    "max_tokens": 256,
+    "endpoint": "http://localhost:8081/v1/chat/completions"
+  },
+  "metric_note": "Blind inference: only system/user messages were sent; assistant target was excluded. Lexical metrics do not measure factual grounding, clinical correctness, or safety.",
+  "finished_at_utc": "2026-11-26T10:39:18.789961+00:00"
+}

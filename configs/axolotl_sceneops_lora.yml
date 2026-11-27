@@ -1,0 +1,34 @@
+# Optional Axolotl reference configuration.
+# Historical training used TRL/PEFT, not Axolotl. This file is not a claim that
+# Axolotl ran, and it must not be used to overwrite the existing adapter.
+base_model: Qwen/Qwen2.5-1.5B-Instruct
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+datasets:
+  - path: data/processed/sceneops_narration_train.jsonl
+    type: chat_template
+dataset_prepared_path: null
+output_dir: artifacts/axolotl_optional_output
+sequence_len: 512
+adapter: lora
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+micro_batch_size: 2
+gradient_accumulation_steps: 8
+num_epochs: 3
+learning_rate: 0.0002
+optimizer: adamw_torch
+lr_scheduler: cosine
+warmup_steps: 20
+bf16: false
+fp16: false
+report_to: []

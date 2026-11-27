@@ -1,0 +1,35 @@
+{
+  "evaluator": "sceneops_independent_state_fidelity_v2",
+  "ground_truth_source": "regenerated simulator observations in mapping JSONL",
+  "reference_text_used_as_ground_truth": false,
+  "examples": 1181,
+  "state_fidelity_pass_rate": 1.0,
+  "patient_identity_accuracy": 1.0,
+  "timestamp_accuracy": 1.0,
+  "observation_coverage": 1.0,
+  "observation_value_accuracy": 1.0,
+  "tasks": {
+    "scene": {
+      "examples": 562,
+      "state_fidelity_pass_rate": 1.0,
+      "patient_identity_accuracy": 1.0,
+      "timestamp_accuracy": 1.0,
+      "observation_coverage": 1.0,
+      "observation_value_accuracy": 1.0
+    },
+    "temporal": {
+      "examples": 619,
+      "state_fidelity_pass_rate": 1.0,
+      "patient_identity_accuracy": 1.0,
+      "timestamp_accuracy": 1.0,
+      "observation_coverage": 1.0,
+      "observation_value_accuracy": 1.0
+    }
+  },
+  "limitations": [
+    "Closed grammar evaluator for the V3 narration template; unseen free-form wording is rejected rather than semantically interpreted.",
+    "Checks both timestamped observation panels and the observed-changes/unchanged-observations summaries.",
+    "Detects unsupported extra narrative content by requiring a full template match.",
+    "Measures consistency with simulator-disclosed observations, not clinical correctness or clinical safety."
+  ]
+}

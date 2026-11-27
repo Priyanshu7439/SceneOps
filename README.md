@@ -1,494 +1,172 @@
-# SceneOps — AI-Powered Mass-Casualty Simulation & Scene Narration
+# SceneOps
 
-**An AI-assisted mass-casualty incident simulation platform combining a deterministic simulation engine with fine-tuned language models for structured scene narration.**
+SceneOps is an educational synthetic mass-casualty incident simulator with AI-assisted scene and temporal narration.
 
-\<p align="center">   \<img src="[https://img.shields.io/badge/Python-3.12-blue?logo=python](https://img.shields.io/badge/Python-3.12-blue?logo=python)" alt="Python"/>   \<img src="[https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi)" alt="FastAPI"/>   \<img src="[https://img.shields.io/badge/LLM-Qwen2.5--1.5B-purple](https://img.shields.io/badge/LLM-Qwen2.5--1.5B-purple)" alt="Qwen"/>   \<img src="[https://img.shields.io/badge/PEFT-LoRA-orange](https://img.shields.io/badge/PEFT-LoRA-orange)" alt="PEFT"/>   \<img src="[https://img.shields.io/badge/Tests-459%20Passed-brightgreen](https://img.shields.io/badge/Tests-459%20Passed-brightgreen)" alt="Tests"/>   \<img src="[https://img.shields.io/badge/Status-Frontend%20Upcoming-yellow](https://img.shields.io/badge/Status-Frontend%20Upcoming-yellow)" alt="Status"/> \</p>
+The learner manages simulated patients, authorized observations, deterioration, limited ambulances, transport, and time pressure. The Python simulator is the source of truth. The language model generates narration only from simulator-approved disclosures.
 
----
+> **Safety boundary:** SceneOps is not a clinically validated diagnostic, treatment, triage, or emergency-response system.
 
-## Overview
+## Current status
 
-SceneOps is a simulation and AI narration project designed for educational mass-casualty incident training.
+- Deterministic simulator, FastAPI backend, React/TypeScript frontend, narration agents, and rule-based safety reviewer are implemented.
+- Latest local verification: **532 Python tests passed**, Ruff clean for `src`/`tests`, frontend lint passed, and frontend production build passed.
+- Real local llama.cpp OpenAI-compatible inference was verified for scene and temporal narration.
+- The fine-tuned model did **not** outperform the base model on preserved blind lexical F1.
+- Ray Serve live inference, vLLM server inference, and remote W&B logging remain unverified.
 
-It provides a simulated emergency scene in which multiple patients, observations, resources, transport operations, and time-dependent changes are managed by a deterministic simulation engine.
+## Screenshots
 
-A fine-tuned language model converts authorized simulator observations into readable scene descriptions and temporal updates.
+Manual screenshots are intentionally not fabricated. Add captures under [`docs/assets/screenshots/`](docs/assets/screenshots/) using its placeholder instructions. Suggested captures are dashboard, patient registry, observations, scene narration, temporal narration, event timeline/resources, and architecture.
 
-The central architectural principle is:
-
-**The simulator owns the truth. The language model owns the narration.**
-
-The LLM does not control the simulation, modify patient states, make triage decisions, or invent hidden information. Its responsibility is limited to generating natural-language descriptions from the information explicitly disclosed to it.
-
-SceneOps is an educational simulation project, not a clinical decision-support system or a replacement for professional emergency medical judgment.
-
-## Project Objectives
-
-- Build a deterministic mass-casualty simulation engine.
-- Represent multiple patients and their changing simulation states.
-- Simulate patient deterioration and resource constraints.
-- Track learner-recorded observations and patient interactions.
-- Generate scene narration using a fine-tuned language model.
-- Generate temporal narration describing what changed and what remained stable.
-- Keep AI-generated language separate from simulator decisions.
-- Build a reliable backend foundation that can support a future interactive frontend.
-
-## System Architecture
-
-SceneOps follows a layered architecture that separates simulation logic, application orchestration, AI agents, and API access.
+## Architecture
 
 ```mermaid
-flowchart TD
-    A["Learner / Future Frontend"] --> B["FastAPI Layer"]
-    B --> C["Application Service"]
-    C --> D["Agent Orchestrator"]
-    C --> E["Simulation Engine"]
-
-    E --> F["Patient State & Observations"]
-    E --> G["Deterioration & Simulation Clock"]
-    E --> H["Resources & Transport"]
-
-    F --> I["Authorized Disclosure Packet"]
-    I --> D
-    D --> J["Scene Narration Agent"]
-    J --> K["Fine-Tuned Qwen Model"]
-    K --> L["Generated Narration"]
-
-    M["Rule-Based Safety Reviewer"] --> D
-    D --> L
+flowchart LR
+    U[Learner / React frontend] --> API[FastAPI API]
+    API --> APP[Application service]
+    APP --> SIM[Deterministic simulator]
+    SIM --> STATE[Patients, observations, clock, deterioration, resources, transport, scoring]
+    APP --> DISC[Authorized disclosure builder]
+    DISC --> ORCH[Agent orchestrator]
+    ORCH --> SCENE[Scene narration agent]
+    ORCH --> TEMP[Temporal narration agent]
+    SCENE --> PROVIDER[OpenAI-compatible model provider]
+    TEMP --> PROVIDER
+    ORCH --> REVIEW[Rule-based safety reviewer]
+    REVIEW --> API
 ```
 
-### Core architectural components
+### Responsibility boundary
 
-| Component                | Responsibility                                          |
-| ------------------------ | ------------------------------------------------------- |
-| Simulator                | Maintains simulation state and deterministic rules      |
-| Patient system           | Manages patient profiles, observations, and state       |
-| Deterioration engine     | Handles time-dependent patient changes                  |
-| Resource management      | Tracks ambulances and transport operations              |
-| Disclosure layer         | Controls which observations are available to AI agents  |
-| Agent orchestrator       | Coordinates narration and safety review                 |
-| Scene narration agent    | Generates natural-language scene descriptions           |
-| FastAPI backend          | Exposes simulation and agent functionality through APIs |
-| vLLM backend integration | Provides a model-serving integration point              |
+| Python simulator owns | LLM may do |
+|---|---|
+| Patient state and deterioration | Turn authorized observations into prose |
+| Clock and temporal progression | Describe recorded timestamps and values |
+| Triage, assessment, resources, transport | Generate scene and temporal narration |
+| Survival, outcomes, and scoring | Nothing beyond language generation |
 
-### Why this separation matters
+The model never receives hidden simulator state and cannot allocate resources, decide treatment, alter survival, or override scoring. Generated text passes through a rule-based reviewer before returning from the API.
 
-Using an LLM as the source of truth for patient states or resource allocation would introduce unnecessary uncertainty into a simulation that requires deterministic behavior.
+## Technology and layout
 
-SceneOps instead uses Python-based simulation logic for state transitions and resource management. The model receives only authorized information and generates language from it.
-
-This separation makes simulation behavior independently testable and helps prevent unsupported AI-generated information from being treated as ground truth.
-
-## Technology Stack
-
-| Area                      | Technologies                 |
-| ------------------------- | ---------------------------- |
-| Programming language      | Python                       |
-| Backend API               | FastAPI, Uvicorn             |
-| Data validation           | Pydantic                     |
-| HTTP communication        | HTTPX                        |
-| AI model                  | Qwen2.5-1.5B-Instruct        |
-| Fine-tuning               | Hugging Face TRL, PEFT       |
-| Fine-tuning method        | LoRA / QLoRA                 |
-| Model development         | PyTorch, Transformers        |
-| Dataset processing        | Python, JSONL                |
-| Quantization experiments  | AWQ, GGUF                    |
-| Model serving experiments | Ray Serve, vLLM integration  |
-| Testing                   | Pytest, pytest-asyncio       |
-| Code quality              | Ruff                         |
-| GPU experimentation       | Kaggle GPU (NVIDIA Tesla T4) |
-
-## AI Model Development
-
-### Base model
-
-`Qwen/Qwen2.5-1.5B-Instruct`
-
-The project uses a small instruction-tuned language model to generate structured narration while keeping the model footprint manageable for experimentation.
-
-### Fine-tuning approach
-
-The model was fine-tuned using parameter-efficient adaptation rather than updating every parameter of the base model.
-
-The training workflow included:
-
-1. Preparing structured narration examples.
-2. Validating generated examples.
-3. Splitting data into training, validation, and test sets.
-4. Fine-tuning using LoRA/QLoRA.
-5. Saving adapter checkpoints.
-6. Exploring quantized model exports.
-7. Testing model inference and serving workflows.
-
-### Primary fine-tuning objectives
-
-The main objectives are:
-
-**1. Scene narration**
-
-Convert a snapshot of learner-recorded observations into a structured description of the current simulation scene.
-
-**2. Temporal scene narration**
-
-Describe changes between simulation time points, distinguishing changed observations from stable observations.
-
-Patient dialogue style selection remains deterministic in Python and is not a primary fine-tuning objective.
-
-## Dataset Engineering
-
-The narration dataset was generated using a scenario-based pipeline.
-
-### Dataset summary
-
-| Dataset metric            | Value |
-| ------------------------- | ----: |
-| Unique narration examples | 5,856 |
-| Scenarios                 |   320 |
-| Training examples         | 3,554 |
-| Training scenarios        |   192 |
-| Validation examples       | 1,121 |
-| Validation scenarios      |    64 |
-| Test examples             | 1,181 |
-| Test scenarios            |    64 |
-
-### Narration distribution
-
-| Example type       |     Count |
-| ------------------ | --------: |
-| Scene narration    |     2,801 |
-| Temporal narration |     3,055 |
-| **Total**          | **5,856** |
-
-The temporal narration examples include both changed and stable observations.
-
-### Data quality and leakage prevention
-
-The dataset pipeline included:
-
-- Duplicate detection and removal.
-- Structured validation of generated examples.
-- Scenario-level dataset splitting.
-- Scenario-level overlap checks across training, validation, and test sets.
-
-The reported scenario-level leakage audit passed for all three dataset comparisons:
-
-- Training vs. validation
-- Training vs. test
-- Validation vs. test
-
-The separation is important because randomly splitting individual examples from the same scenario could allow closely related examples to appear in multiple datasets.
-
-## Model Evaluation
-
-Model inference was tested using the LoRA adapter available in the Kaggle training artifacts.
-
-### Evaluation environment
-
-| Configuration     | Value                       |
-| ----------------- | --------------------------- |
-| Base model        | Qwen2.5-1.5B-Instruct       |
-| Evaluated adapter | checkpoint-223              |
-| GPU               | NVIDIA Tesla T4             |
-| GPU memory        | Approximately 14.56 GB      |
-| Framework         | PyTorch, Transformers, PEFT |
-
-### Initial held-out evaluation
-
-A held-out example from the test dataset was passed through the model using its original system and user messages.
-
-| Evaluation result | Value |
-| ----------------- | ----: |
-| Samples evaluated |     1 |
-| Exact matches     |     1 |
-| Exact-match rate  |  100% |
-
-The generated narration matched the dataset reference exactly.
-
-### 20-sample evaluation
-
-A subsequent batch evaluation was performed on 20 examples from the held-out test dataset.
-
-| Metric                  |                             Result |
-| ----------------------- | ---------------------------------: |
-| Test examples evaluated |                                 20 |
-| Exact matches           |                                 20 |
-| Exact-match rate        |                             100.0% |
-| Total inference time    | Approximately 2 minutes 45 seconds |
-| Average inference time  |  Approximately 8.25 seconds/sample |
-
-**Evaluation qualification:** This is an initial 20-sample evaluation, not a full evaluation of all 1,181 test examples. Exact-match performance on a small subset does not establish generalization, clinical safety, or overall model accuracy. Further evaluation across the complete test set and more challenging scenarios is required.
-
-### Evaluation artifacts
-
-The batch evaluation generated:
-
-`sceneops_20_sample_evaluation.json`
-
-This file contains the generated predictions, reference outputs, and exact-match results for the evaluated examples.
-
-## Backend API
-
-The FastAPI backend provides endpoints for interacting with simulation sessions and narration functionality.
-
-Implemented API functionality includes:
-
-| Endpoint / functionality | Purpose                                             |
-| ------------------------ | --------------------------------------------------- |
-| `/health`                | Backend health check                                |
-| Session creation         | Create a simulation session                         |
-| Session retrieval        | Retrieve session information                        |
-| Session lifecycle        | Start, pause, resume, complete, and delete sessions |
-| Simulation advancement   | Advance simulation time                             |
-| Patient dialogue         | Handle patient interaction                          |
-| Patient observation      | Retrieve authorized patient observations            |
-| Scene narration          | Generate a scene description                        |
-| Patient questions        | Record learner questions to patients                |
-
-The backend is organized into API, application, agent, simulator, and serving modules.
-
-## Model Serving & Quantization Experiments
-
-Beyond adapter-based inference, the project explored model deployment and optimization workflows.
-
-These experiments included:
-
-- AWQ quantization.
-- GGUF Q4_K_M conversion.
-- Ray Serve integration.
-- vLLM backend integration.
-- API-based generation smoke testing.
-
-These are engineering experiments and integration milestones. They should not be interpreted as proof of production-scale deployment or production performance.
-
-## Testing & Code Quality
-
-The simulator and backend have been tested using Pytest.
-
-**Latest recorded test result:**
+Python/FastAPI/Uvicorn/Pydantic/HTTPX; React/TypeScript/Vite; Qwen/Qwen2.5-1.5B-Instruct historical QLoRA; Transformers/TRL/PEFT/bitsandbytes; GGUF/AWQ experiments; Pytest/Ruff/oxlint.
 
 ```text
-459 passed, 3 warnings in 9.17s
+src/sceneops/{simulator,agents,application,api,serving,training,tracking}
+frontend/             React + TypeScript + Vite
+data/processed/       preserved narration dataset and manifest
+artifacts/            evaluation reports and historical evidence
+docs/                 architecture, reproducibility, safety, and audits
+tests/                simulator, agent, API, serving, tracking, training
 ```
 
-The test suite covers simulation behavior, patient state management, resource allocation, API behavior, and related application logic.
+## Dataset
 
-The three warnings were recorded during the test run and should be reviewed as dependencies and API usage evolve.
+The authoritative manifest is [`data/processed/sceneops_narration_manifest.json`](data/processed/sceneops_narration_manifest.json).
 
-## Repository Structure
+| Split | Examples | Scenarios |
+|---|---:|---:|
+| Train | 3,554 | 192 |
+| Validation | 1,121 | 64 |
+| Test | 1,181 | 64 |
+| **Total** | **5,856** | **320** |
 
-The project is organized into the following major modules:
+The dataset contains 2,801 scene and 3,055 temporal examples. The manifest records a passed scenario-level leakage audit. Patient-dialogue datasets and style-selection code are preserved as experimental work, not silently presented as the primary narration objective.
 
-```text
-SceneOps/
-│
-├── src/
-│   └── sceneops/
-│       ├── agents/
-│       │   ├── backend.py
-│       │   ├── contracts.py
-│       │   ├── conversation_controller.py
-│       │   ├── conversation_memory.py
-│       │   ├── disclosure.py
-│       │   ├── disclosure_rules.py
-│       │   ├── orchestrator.py
-│       │   ├── patient_dialogue.py
-│       │   ├── safety_reviewer.py
-│       │   └── scene_narration.py
-│       │
-│       ├── api/
-│       │   ├── main.py
-│       │   ├── schemas.py
-│       │   └── session_manager.py
-│       │
-│       ├── application/
-│       │   └── service.py
-│       │
-│       ├── evaluation/
-│       │
-│       ├── serving/
-│       │   └── vllm_backend.py
-│       │
-│       ├── simulator/
-│       │   ├── clock.py
-│       │   ├── deterioration.py
-│       │   ├── engine.py
-│       │   ├── observations.py
-│       │   ├── patients.py
-│       │   ├── resources.py
-│       │   ├── scenario.py
-│       │   ├── scenario_builder.py
-│       │   ├── transport.py
-│       │   └── triage.py
-│       │
-│       └── training/
-│           ├── dataset.py
-│           ├── splitting.py
-│           ├── scene_narration_dataset.py
-│           ├── temporal_scene_narration_dataset.py
-│           ├── temporal_scene_narration_dataset_v2.py
-│           ├── temporal_scene_narration_dataset_v3.py
-│           └── validators and evaluators
-│
-├── tests/
-├── notebooks/
-├── docs/
-├── requirements.txt
-├── pyproject.toml
-└── README.md
+See [`docs/DATASET.md`](docs/DATASET.md).
+
+## Training and artifacts
+
+Historical training used Qwen/Qwen2.5-1.5B-Instruct with QLoRA: rank 16, alpha 32, dropout 0.05, q/k/v/o/gate/up/down target modules, 4-bit NF4, 3 epochs, and 669 optimization steps, resumed from checkpoint-223. These facts are supported by the notebook audit. The original checkpoint and complete environment are not present here, so this is historical evidence rather than a fully reproducible local training run. No retraining is performed.
+
+Historical exports include merged Hugging Face, AWQ, and GGUF Q4_K_M artifacts. The GGUF is intended for llama.cpp-compatible serving; GGUF compatibility with standard vLLM is not assumed.
+
+See [`docs/TRAINING.md`](docs/TRAINING.md) and [`docs/MODEL_SERVING.md`](docs/MODEL_SERVING.md).
+
+## Blind evaluation
+
+Valid preserved runs: [`artifacts/evaluation/base_blind`](artifacts/evaluation/base_blind) and [`artifacts/evaluation/gguf_blind`](artifacts/evaluation/gguf_blind). Both used the same 1,181-example test set, dataset SHA-256, temperature 0, max tokens 256, and system/user-only prompts with assistant targets excluded.
+
+| Metric | Base | Fine-tuned GGUF | Delta |
+|---|---:|---:|---:|
+| Overall token F1 | 0.6235269 | 0.5043650 | -11.9162 pp |
+| Scene token F1 | 0.8181509 | 0.5649590 | -25.3192 pp |
+| Temporal token F1 | 0.4468247 | 0.4493507 | +0.2526 pp |
+
+Paired fine-tuned wins/losses/ties were 215/966/0 overall, 0/562/0 scene, and 215/404/0 temporal. Fine-tuning therefore did not improve preserved lexical F1. Lexical F1 is not a semantic, safety, or clinical correctness score. The older `artifacts/evaluation/gguf_final` output contains target leakage and is excluded from conclusions.
+
+## State fidelity
+
+The independent report records 1,181/1,181 strict-template checks passing for simulator-derived patient identity, timestamps, observation coverage, and values. This is a closed-grammar field evaluator, not broad semantic robustness or clinical validation. The detailed audit records seven temporal follow-command attribution errors, visible hemorrhage explicitly correct in 606/619 applicable examples, and 16 capillary-refill omissions where a value was available.
+
+## Serving status
+
+The verified local provider is llama.cpp exposing an OpenAI-compatible API:
+
+```powershell
+$env:SCENEOPS_VLLM_BASE_URL = "http://127.0.0.1:8081/v1"
+$env:SCENEOPS_VLLM_MODEL = "auto"
 ```
 
-*This is a high-level representation of the source modules; individual filenames and optional artifacts may vary across project revisions.*
+`auto` resolves the sole model advertised by `/v1/models`; use the exact ID for a multi-model provider. Real scene and temporal narration passed through the backend and frontend proxy.
 
-## Local Setup
+- Ray Serve: implementation plus mocked health/error/timeout tests; live model deployment unverified.
+- vLLM: OpenAI-compatible client tested; live vLLM server inference and GGUF compatibility unverified.
+- W&B: disabled/offline/mock-safe tracker tested; remote logging unverified.
+- Axolotl: optional configuration structurally validated; no Axolotl training run executed.
 
-### Prerequisites
+See [`docs/MODEL_SERVING.md`](docs/MODEL_SERVING.md) and [`docs/EXPERIMENT_TRACKING.md`](docs/EXPERIMENT_TRACKING.md).
 
-- Python 3.12
-- Git
-- A compatible Python environment
-- GPU recommended for local model inference; CPU-only execution may be slower
+## Setup and run
 
-### Clone the repository
-
-```bash
+```powershell
 git clone https://github.com/Priyanshu7439/SceneOps.git
 cd SceneOps
-```
-
-### Create a virtual environment
-
-Windows:
-
-```bash
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
-Linux / macOS:
+Copy `.env.example` to `.env` only for local configuration. Never commit `.env` or credentials.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
+Backend:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m uvicorn sceneops.api.main:app --host 127.0.0.1 --port 8001
 ```
 
-### Install dependencies
+Frontend:
 
-```bash
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+```powershell
+cd frontend
+npm ci
+$env:VITE_API_PROXY_TARGET = "http://127.0.0.1:8001"
+npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-### Run tests
+Verification:
 
-```bash
+```powershell
+$env:PYTHONPATH = "src"
 python -m pytest -q
+python -m ruff check src tests
+npm run lint --prefix frontend
+npm run build --prefix frontend
 ```
 
-**Note:** Full model inference additionally requires access to the base model and the corresponding trained adapter artifacts. The model artifacts are not assumed to be included in the source repository.
+## Documentation
 
-For API startup, use the FastAPI application entry point in `src/sceneops/api/main.py` and the project's configured environment.
+- [Architecture](docs/ARCHITECTURE.md) · [Dataset](docs/DATASET.md) · [Training](docs/TRAINING.md)
+- [Evaluation](docs/EVALUATION.md) · [Model serving](docs/MODEL_SERVING.md) · [W&B](docs/EXPERIMENT_TRACKING.md)
+- [Reproducibility](docs/REPRODUCIBILITY.md) · [Deployment](docs/DEPLOYMENT.md)
+- [Safety and limitations](docs/SAFETY_AND_LIMITATIONS.md) · [Development](docs/DEVELOPMENT.md)
+- [Evidence inventory](docs/EVIDENCE_INVENTORY.md) · [Completion audit](docs/completion/final_project_status.md)
 
-## Screenshots & Demonstrations
+## Responsible use
 
-Screenshots from actual Kaggle inference runs will be maintained in:
+SceneOps uses synthetic educational scenarios. It is not clinically validated and must not be used to make real emergency decisions. Narration may be incomplete, rejected, or wrong; deterministic simulator rules remain authoritative.
 
-```text
-assets/
-└── screenshots/
-    ├── 01_gpu_environment.png
-    ├── 02_model_loading.png
-    ├── 03_scene_narration.png
-    ├── 04_temporal_narration.png
-    ├── 05_heldout_exact_match.png
-    └── 06_batch_evaluation.png
-```
+## License and citation
 
-Once the images are added to the repository, they can be displayed here.
-
-### Model loading
-
-
-
-### Scene and temporal narration
-
-
-
-### Held-out test inference
-
-
-
-### Initial batch evaluation
-
-
-
-These screenshots are intended as implementation evidence, not as a substitute for a complete evaluation report.
-
-## Current Development Status
-
-| Area                                    | Status                                |
-| --------------------------------------- | ------------------------------------- |
-| Deterministic simulation engine         | Implemented and tested                |
-| Patient and observation management      | Implemented                           |
-| Deterioration and resource management   | Implemented                           |
-| Disclosure and narration architecture   | Implemented                           |
-| Narration dataset generation            | Completed for current dataset version |
-| LoRA/QLoRA fine-tuning experiments      | Completed                             |
-| Adapter-based inference                 | Verified                              |
-| Initial held-out evaluation             | Completed on 20 samples               |
-| AWQ/GGUF experiments                    | Completed                             |
-| Ray Serve integration experiments       | Tested                                |
-| Backend API                             | Implemented                           |
-| Interactive frontend                    | Upcoming                              |
-| End-to-end frontend/backend integration | Pending                               |
-| Broader model evaluation                | Pending                               |
-
-## What's Next?
-
-### Upcoming: Interactive Frontend Development
-
-The backend and simulation foundation are in place. The next major development phase is the **interactive frontend**, which is scheduled to begin shortly.
-
-The planned frontend will provide a more accessible interface for interacting with the simulation rather than relying on API calls and notebook-based demonstrations.
-
-Planned areas include:
-
-- Interactive simulation dashboard.
-- Real-time scene and patient information.
-- Simulation clock and event visibility.
-- Patient observation and interaction interfaces.
-- Ambulance and resource visibility.
-- AI-generated scene and temporal narration panels.
-- Backend integration for simulation controls and session management.
-
-The frontend has not been implemented yet. These are planned capabilities, not existing features.
-
-Further work will also focus on larger-scale held-out evaluation, stronger difficult-case testing, and end-to-end verification.
-
-## Safety & Intended Use
-
-SceneOps is designed for educational simulation and software engineering experimentation.
-
-- It does not provide real-world medical diagnosis.
-- It does not recommend or prescribe patient treatment.
-- It does not replace qualified medical professionals.
-- The simulator remains the authoritative source of simulation state.
-- The narration model is restricted to authorized observations.
-
-Do not use this project to make real emergency medical decisions.
-
-## Author
-
-**Priyanshu Kumar**
-
-Computer Science and Business Systems | AI/ML Engineering
-
-GitHub: [@Priyanshu7439](https://github.com/Priyanshu7439)
-
-Project Repository: [SceneOps](https://github.com/Priyanshu7439/SceneOps)
-
----
-
-\<p align="center">
-&#x20; \<b>SceneOps — Deterministic Simulation. AI-Powered Narration.\</b>
-\</p>
+No license is declared in this repository. Do not assume reuse permissions. No DOI or publication metadata is claimed.

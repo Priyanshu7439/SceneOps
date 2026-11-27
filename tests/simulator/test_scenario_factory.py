@@ -56,7 +56,7 @@ def test_factory_preserves_original_scenario_metadata():
     assert scenario.title == "20-Patient Mass Casualty Exercise"
     assert scenario.description == (
         "Synthetic educational scenario with 20 patients, "
-        "five ambulances and two timed deterioration events."
+        "five ambulances and three timed deterioration events."
     )
     assert scenario.duration_seconds == 600
 

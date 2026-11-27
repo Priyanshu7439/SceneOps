@@ -1,7 +1,9 @@
+
 from sceneops.agents.contracts import (
     AgentRequest,
     AgentResponse,
     AgentTask,
+    TemporalObservation,
 )
 from sceneops.agents.conversation_controller import (
     PatientConversationController,
@@ -21,6 +23,8 @@ from sceneops.simulator.observations import (
     LearnerObservation,
     ObservationType,
 )
+from sceneops.simulator.resources import AllocationResult
+from sceneops.simulator.transport import TransportRecord
 from sceneops.simulator.triage import TriageResult
 
 
@@ -53,8 +57,44 @@ class SceneOpsApplicationService:
         for patient_id in self.engine.patients:
             self.conversation_controller.conversation_manager.clear_patient(patient_id)
 
+    def get_resource_dashboard(self) -> list[dict]:
+        return [
+            {
+                "ambulance_id": ambulance.ambulance_id,
+                "status": ambulance.status.value,
+                "assigned_patient_id": ambulance.assigned_patient_id,
+            }
+            for ambulance in self.engine.resource_manager.ambulances.values()
+        ]
+
+    def get_event_timeline(self) -> list[dict]:
+        return [
+            {
+                "event_type": event.event_type,
+                "simulation_second": event.simulation_second,
+                "description": event.description,
+                "patient_id": event.patient_id,
+            }
+            for event in self.engine.events
+        ]
+
     def assess_patient(self, patient_id: str) -> TriageResult:
         return self.engine.assess_patient(patient_id)
+
+    def allocate_patient(self, patient_id: str) -> AllocationResult | None:
+        self._require_running()
+        return self.engine.allocate_patient(patient_id)
+
+    def start_transport(
+        self,
+        patient_id: str,
+        travel_duration_seconds: int,
+    ) -> TransportRecord:
+        self._require_running()
+        return self.engine.start_transport(
+            patient_id,
+            travel_duration_seconds,
+        )
 
     def observe_patient(
         self,
@@ -108,6 +148,46 @@ class SceneOpsApplicationService:
 
         return await self.agent_orchestrator.handle(request)
 
+    async def narrate_temporal_scene(
+        self,
+        user_message: str,
+    ) -> AgentResponse:
+        """Narrate the complete timestamped learner observation history."""
+        self._require_running()
+
+        if self.agent_orchestrator is None:
+            raise RuntimeError(
+                "Temporal scene narration is not configured for this simulation."
+            )
+
+        observations = self.engine.observation_registry.get_all()
+
+        if not observations:
+            raise ValueError(
+                "No learner observations are available for temporal narration."
+            )
+
+        temporal_observations = tuple(
+            TemporalObservation(
+                patient_id=observation.patient_id,
+                observation_type=observation.observation_type.value,
+                value=observation.value,
+                observed_at_seconds=observation.observed_at_seconds,
+            )
+            for observation in sorted(
+                observations,
+                key=lambda item: item.observed_at_seconds,
+            )
+        )
+
+        request = AgentRequest(
+            task=AgentTask.TEMPORAL_SCENE_NARRATION,
+            user_message=user_message,
+            temporal_observations=temporal_observations,
+        )
+
+        return await self.agent_orchestrator.handle(request)
+
     def record_patient_question(
         self,
         patient_id: str,
@@ -145,6 +225,60 @@ class SceneOpsApplicationService:
 
     def get_snapshot(self) -> dict:
         return self.engine.get_snapshot()
+
+    def get_patient_dashboard(self) -> list[dict]:
+        """Return safe, learner-facing patient dashboard metadata."""
+        engine = self.engine
+        patients = []
+
+        for patient_id in engine.patients:
+            triage = engine.triage_results.get(patient_id)
+            allocation = engine.allocations.get(patient_id)
+
+            latest_transport = max(
+                (
+                    record
+                    for record in engine.transport_manager.transports.values()
+                    if record.patient_id == patient_id
+                ),
+                key=lambda record: record.started_at_seconds,
+                default=None,
+            )
+
+            if patient_id in engine.transported_patients:
+                transport_status = "transported"
+            elif latest_transport is not None:
+                transport_status = latest_transport.status.value
+            elif allocation is not None:
+                transport_status = "allocated"
+            else:
+                transport_status = "not_allocated"
+
+            ambulance_id = (
+                allocation.ambulance_id
+                if allocation is not None
+                else (
+                    latest_transport.ambulance_id
+                    if latest_transport is not None
+                    else None
+                )
+            )
+
+            patients.append({
+                "patient_id": patient_id,
+                "assessment_status": (
+                    "assessed" if triage is not None else "pending"
+                ),
+                "triage_category": (
+                    triage.category.value
+                    if triage is not None
+                    else "pending_assessment"
+                ),
+                "ambulance_id": ambulance_id,
+                "transport_status": transport_status,
+            })
+
+        return patients
 
     def _require_running(self) -> None:
         if self.engine.status != SimulationStatus.RUNNING:

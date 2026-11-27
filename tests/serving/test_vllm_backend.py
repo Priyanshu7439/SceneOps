@@ -77,3 +77,59 @@ async def test_backend_rejects_empty_model_response():
     with pytest.raises(VLLMBackendError, match="empty"):
         await backend.generate(system_prompt="Act", user_prompt="Hello")
     await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_backend_resolves_single_advertised_llama_cpp_model():
+    seen = {}
+
+    async def handler(request):
+        if request.url.path.endswith("/models"):
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": "/models/sceneops.gguf"}
+                    ]
+                },
+            )
+        seen["model"] = (await request.aread()).decode()
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "Authorized narration."}}]},
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    backend = VLLMBackend(
+        base_url="http://test/v1",
+        model="auto",
+        auto_discover_model=True,
+        client=client,
+    )
+
+    assert await backend.generate(system_prompt="Act", user_prompt="Observe") == (
+        "Authorized narration."
+    )
+    assert '"model":"/models/sceneops.gguf"' in seen["model"]
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_backend_reports_unavailable_configured_model():
+    async def handler(request):
+        return httpx.Response(
+            200,
+            json={"data": [{"id": "first"}, {"id": "second"}]},
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    backend = VLLMBackend(
+        base_url="http://test/v1",
+        model="auto",
+        auto_discover_model=True,
+        client=client,
+    )
+
+    with pytest.raises(VLLMBackendError, match="Available models: first, second"):
+        await backend.generate(system_prompt="Act", user_prompt="Observe")
+    await client.aclose()

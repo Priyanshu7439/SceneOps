@@ -130,20 +130,26 @@ def create_mass_casualty_scenario(
             at_seconds=240 + event_offset,
             changes=PatientChanges(follows_commands=False),
         ),
+        DeteriorationEvent(
+            event_id="EV003",
+            patient_id="P011",
+            at_seconds=360 + event_offset,
+            changes=PatientChanges(follows_commands=False),
+        ),
     ]
 
-    # Preserve the original metadata for the default scenario.
+    # Keep scenario metadata aligned with the configured event count.
     if scenario_index == 1:
         title = "20-Patient Mass Casualty Exercise"
         description = (
             "Synthetic educational scenario with 20 patients, "
-            "five ambulances and two timed deterioration events."
+            "five ambulances and three timed deterioration events."
         )
     else:
         title = f"20-Patient Mass Casualty Exercise {scenario_index}"
         description = (
             "Synthetic educational scenario with 20 patients, "
-            "five ambulances and two timed deterioration events. "
+            "five ambulances and three timed deterioration events. "
             f"Deterministic variation index: {scenario_index}."
         )
 

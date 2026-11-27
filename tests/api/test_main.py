@@ -13,10 +13,19 @@ class FakeVLLMBackend:
 
     received_clients: ClassVar[list] = []
 
-    def __init__(self, *, base_url, model, api_key=None, client=None):
+    def __init__(
+        self,
+        *,
+        base_url,
+        model,
+        api_key=None,
+        auto_discover_model=False,
+        client=None,
+    ):
         self.base_url = base_url
         self.model = model
         self.api_key = api_key
+        self.auto_discover_model = auto_discover_model
         self.client = client
         type(self).received_clients.append(client)
 
@@ -579,6 +588,213 @@ def test_scene_narration_vllm_failure_returns_503(monkeypatch, client_and_manage
     response = client.post(
         f"/sessions/{session_id}/narration",
         json={"message": "Summarize the observations."},
+    )
+
+    assert response.status_code == 503
+    assert "timed out" in response.json()["detail"]
+
+def test_get_patient_dashboard(client_and_manager):
+    client, _ = client_and_manager
+    session_id = create_session(client)
+
+    response = client.get(
+        f"/sessions/{session_id}/patients"
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+    patients = data["patients"]
+
+    assert len(patients) == 20
+
+    for patient in patients:
+        assert patient["assessment_status"] == "pending"
+        assert patient["triage_category"] == "pending_assessment"
+        assert patient["ambulance_id"] is None
+        assert patient["transport_status"] == "not_allocated"
+
+        assert set(patient.keys()) == {
+            "patient_id",
+            "assessment_status",
+            "triage_category",
+            "ambulance_id",
+            "transport_status",
+        }
+
+
+def test_patient_dashboard_unknown_session_returns_404(
+    client_and_manager,
+):
+    client, _ = client_and_manager
+
+    response = client.get(
+        "/sessions/unknown/patients"
+    )
+
+    assert response.status_code == 404
+
+
+
+def test_patient_dashboard_reflects_assessment(
+    client_and_manager,
+):
+    client, manager = client_and_manager
+    session_id = create_session(client)
+
+    service = manager.get_session(session_id)
+
+    patient_id = next(iter(service.engine.patients))
+    triage_result = service.assess_patient(patient_id)
+
+    response = client.get(
+        f"/sessions/{session_id}/patients"
+    )
+
+    assert response.status_code == 200
+
+    patients = response.json()["patients"]
+    patient = next(
+        item
+        for item in patients
+        if item["patient_id"] == patient_id
+    )
+
+    assert patient["assessment_status"] == "assessed"
+    assert patient["triage_category"] == triage_result.category.value
+
+def test_temporal_scene_narration_success(monkeypatch, client_and_manager):
+    class TemporalNarrationVLLMBackend(FakeVLLMBackend):
+        response = "The supplied observation history is available for review."
+
+    install_backend(monkeypatch, TemporalNarrationVLLMBackend)
+
+    client, _ = client_and_manager
+    session_id = create_session(client)
+
+    client.post(f"/sessions/{session_id}/start")
+
+    observation = client.post(
+        f"/sessions/{session_id}/patients/P001/observations",
+        json={"observation_type": "respiratory_rate"},
+    )
+    assert observation.status_code == 201
+
+    response = client.post(
+        f"/sessions/{session_id}/temporal-narration",
+        json={"message": "Describe the recorded observations over time."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["agent_name"] == "temporal_scene_narration_agent"
+    assert response.json()["content"] == (
+        "The supplied observation history is available for review."
+    )
+
+
+def test_temporal_scene_narration_before_start_returns_409(
+    monkeypatch,
+    client_and_manager,
+):
+    install_backend(monkeypatch, FakeVLLMBackend)
+
+    client, _ = client_and_manager
+    session_id = create_session(client)
+
+    response = client.post(
+        f"/sessions/{session_id}/temporal-narration",
+        json={"message": "Describe the timeline."},
+    )
+
+    assert response.status_code == 409
+
+
+def test_temporal_scene_narration_without_observations_returns_422(
+    monkeypatch,
+    client_and_manager,
+):
+    install_backend(monkeypatch, FakeVLLMBackend)
+
+    client, _ = client_and_manager
+    session_id = create_session(client)
+    client.post(f"/sessions/{session_id}/start")
+
+    response = client.post(
+        f"/sessions/{session_id}/temporal-narration",
+        json={"message": "Describe the timeline."},
+    )
+
+    assert response.status_code == 422
+
+
+def test_temporal_scene_narration_unknown_session_returns_404(
+    client_and_manager,
+):
+    client, _ = client_and_manager
+
+    response = client.post(
+        "/sessions/unknown/temporal-narration",
+        json={"message": "Describe the timeline."},
+    )
+
+    assert response.status_code == 404
+
+
+def test_temporal_scene_narration_rejects_invalid_request(client_and_manager):
+    client, _ = client_and_manager
+    session_id = create_session(client)
+
+    response = client.post(
+        f"/sessions/{session_id}/temporal-narration",
+        json={"message": ""},
+    )
+
+    assert response.status_code == 422
+
+
+def test_temporal_scene_narration_rejects_client_supplied_observations(
+    client_and_manager,
+):
+    client, _ = client_and_manager
+    session_id = create_session(client)
+
+    response = client.post(
+        f"/sessions/{session_id}/temporal-narration",
+        json={
+            "message": "Describe the timeline.",
+            "temporal_observations": [
+                {
+                    "patient_id": "P001",
+                    "observation_type": "respiratory_rate",
+                    "value": "999",
+                    "observed_at_seconds": 0,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_temporal_scene_narration_vllm_failure_returns_503(
+    monkeypatch,
+    client_and_manager,
+):
+    install_backend(monkeypatch, FailingVLLMBackend)
+
+    client, _ = client_and_manager
+    session_id = create_session(client)
+    client.post(f"/sessions/{session_id}/start")
+
+    observation = client.post(
+        f"/sessions/{session_id}/patients/P001/observations",
+        json={"observation_type": "respiratory_rate"},
+    )
+    assert observation.status_code == 201
+
+    response = client.post(
+        f"/sessions/{session_id}/temporal-narration",
+        json={"message": "Describe the recorded observations over time."},
     )
 
     assert response.status_code == 503

@@ -348,6 +348,20 @@ class FakeSceneAgent:
         )
 
 
+class FakeTemporalSceneAgent:
+    def __init__(self) -> None:
+        self.requests: list[AgentRequest] = []
+
+    async def generate(self, request: AgentRequest) -> AgentResponse:
+        self.requests.append(request)
+
+        return AgentResponse(
+            task=AgentTask.TEMPORAL_SCENE_NARRATION,
+            agent_name="fake_temporal_scene_agent",
+            content="P001 respiratory rate changed from 20 to 24.",
+        )
+
+
 class FakeOrchestratorReviewer:
     async def review(
         self,
@@ -369,6 +383,25 @@ def make_narration_service():
 
     service.agent_orchestrator = orchestrator
     return service, engine, scene_agent
+
+
+def make_temporal_narration_service(
+    *patients: Patient,
+):
+    service, engine, _, _ = make_service(*patients)
+
+    temporal_agent = FakeTemporalSceneAgent()
+
+    orchestrator = AgentOrchestrator(
+        patient_agent=FakePatientAgent(),
+        scene_agent=FakeSceneAgent(),
+        temporal_scene_agent=temporal_agent,
+        safety_reviewer=FakeOrchestratorReviewer(),
+    )
+
+    service.agent_orchestrator = orchestrator
+
+    return service, engine, temporal_agent
 
 
 def test_service_generates_scene_narration_from_observations():
@@ -440,3 +473,88 @@ def test_service_rejects_narration_when_orchestrator_is_missing():
 
     with pytest.raises(RuntimeError, match="not configured"):
         asyncio.run(service.narrate_scene("Summarize the scene."))
+
+def test_service_generates_temporal_narration_from_complete_history():
+    service, engine, temporal_agent = make_temporal_narration_service(
+        make_patient("P001"),
+        make_patient("P002"),
+    )
+    service.start()
+
+    # P001 observation at simulation second 0.
+    service.observe_patient(
+        "P001",
+        ObservationType.RESPIRATORY_RATE,
+    )
+
+    # P002 observation at simulation second 30.
+    engine.advance_time(30)
+
+    service.observe_patient(
+        "P002",
+        ObservationType.RESPIRATORY_RATE,
+    )
+
+    # P001 observation at simulation second 60.
+    engine.advance_time(30)
+
+    service.observe_patient(
+        "P001",
+        ObservationType.RESPIRATORY_RATE,
+    )
+
+    response = asyncio.run(
+        service.narrate_temporal_scene(
+            "Describe how the observations changed over time."
+        )
+    )
+
+    assert response.agent_name == "fake_temporal_scene_agent"
+    assert response.task == AgentTask.TEMPORAL_SCENE_NARRATION
+    assert len(temporal_agent.requests) == 1
+
+    observations = temporal_agent.requests[0].temporal_observations
+
+    # All three observations must be preserved.
+    assert len(observations) == 3
+
+    # Observations must be chronologically ordered.
+    assert [
+        observation.observed_at_seconds
+        for observation in observations
+    ] == [0, 30, 60]
+
+    # Repeated observations for P001 must not be discarded.
+    assert [
+        observation.patient_id
+        for observation in observations
+    ] == ["P001", "P002", "P001"]
+
+
+def test_service_rejects_temporal_narration_without_observations():
+    service, _, _ = make_temporal_narration_service()
+    service.start()
+
+    with pytest.raises(ValueError, match="No learner observations"):
+        asyncio.run(
+            service.narrate_temporal_scene("Describe the timeline.")
+        )
+
+
+def test_service_rejects_temporal_narration_before_start():
+    service, _, _ = make_temporal_narration_service()
+
+    with pytest.raises(RuntimeError, match="running simulation"):
+        asyncio.run(
+            service.narrate_temporal_scene("Describe the timeline.")
+        )
+
+
+def test_service_rejects_temporal_narration_without_orchestrator():
+    service, _, _, _ = make_service()
+    service.start()
+
+    with pytest.raises(RuntimeError, match="not configured"):
+        asyncio.run(
+            service.narrate_temporal_scene("Describe the timeline.")
+        )

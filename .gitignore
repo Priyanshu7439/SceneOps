@@ -47,3 +47,21 @@ pytest_errors.txt
 
 # Ignore generated package metadata
 src/sceneops.egg-info/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+
+# Local model weights and checkpoints (keep metadata/documentation tracked)
+models/gguf/
+models/**/*.gguf
+models/**/*.safetensors
+models/**/checkpoint-*/
+*.gguf
+*.safetensors
+
+# Local test/cache output
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.log

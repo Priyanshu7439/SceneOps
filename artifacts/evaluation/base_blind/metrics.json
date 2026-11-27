@@ -1,0 +1,39 @@
+{
+  "completed_examples": 1181,
+  "failed_examples": 0,
+  "overall": {
+    "examples": 1181,
+    "exact_match": 0.0,
+    "token_precision": 0.6917310668133306,
+    "token_recall": 0.6058323928265231,
+    "token_f1": 0.6235269267642524,
+    "sequence_similarity": 0.4506062414237452
+  },
+  "by_task": {
+    "scene": {
+      "examples": 562,
+      "exact_match": 0.0,
+      "token_precision": 0.7818451469930986,
+      "token_recall": 0.8583076227099433,
+      "token_f1": 0.8181508991743228,
+      "sequence_similarity": 0.7411321265331637
+    },
+    "temporal": {
+      "examples": 619,
+      "exact_match": 0.0,
+      "token_precision": 0.609915052175157,
+      "token_recall": 0.3766060936431917,
+      "token_f1": 0.44682470948725794,
+      "sequence_similarity": 0.18683314379613106
+    }
+  },
+  "dataset_sha256": "20678f5909fd531805ef0f4da152108ca917c67ff4104d87d682cb718441e89a",
+  "model": "qwen2.5-1.5b-instruct-base",
+  "generation": {
+    "temperature": 0.0,
+    "max_tokens": 256,
+    "endpoint": "http://localhost:8082/v1/chat/completions"
+  },
+  "metric_note": "Blind inference: only system/user messages were sent; assistant target was excluded. Lexical metrics do not measure factual grounding, clinical correctness, or safety.",
+  "finished_at_utc": "2026-11-26T13:01:48.268481+00:00"
+}

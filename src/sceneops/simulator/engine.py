@@ -358,6 +358,58 @@ class SimulationEngine:
 
         return result
 
+    def allocate_patient(self, patient_id: str) -> AllocationResult | None:
+        """Allocate an ambulance to the learner-selected patient."""
+
+        if self.status != SimulationStatus.RUNNING:
+            raise RuntimeError("Allocation requires a running simulation.")
+
+        if patient_id not in self.patients:
+            raise KeyError(f"Unknown patient: {patient_id}")
+
+        triage = self.triage_results.get(patient_id)
+
+        if triage is None:
+            raise ValueError(
+                f"Patient {patient_id} must be assessed before allocation."
+            )
+
+        if patient_id in self.allocations:
+            raise ValueError(
+                f"Patient {patient_id} already has an ambulance allocation."
+            )
+
+        if patient_id in self.transported_patients:
+            raise ValueError(
+                f"Patient {patient_id} has already been transported."
+            )
+
+        if triage.category not in self.resource_manager.PRIORITY:
+            raise ValueError(
+                f"Patients in {triage.category.value} category "
+                "are not eligible for ambulance allocation."
+            )
+
+        result = self.resource_manager.allocate_patient(
+            patient_id=patient_id,
+            category=triage.category,
+        )
+
+        if result is None:
+            return None
+
+        self.allocations[patient_id] = result
+
+        self._record_event(
+            event_type="ambulance_allocated",
+            description=(
+                f"Ambulance {result.ambulance_id} assigned to {patient_id}."
+            ),
+            patient_id=patient_id,
+        )
+
+        return result
+
     def start_transport(
         self,
         patient_id: str,

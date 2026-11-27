@@ -9,6 +9,7 @@ from sceneops.agents.contracts import (
     AgentTask,
     SafetyReview,
     SceneFact,
+    TemporalObservation,
 )
 from sceneops.agents.disclosure import (
     DisclosureFact,
@@ -35,6 +36,13 @@ class FakeSceneAgent:
             content="A responder approaches the patient.",
         )
 
+class FakeTemporalSceneAgent:
+    async def generate(self, request: AgentRequest) -> AgentResponse:
+        return AgentResponse(
+            task=AgentTask.TEMPORAL_SCENE_NARRATION,
+            agent_name="fake_temporal_scene",
+            content="P001 had two recorded observations.",
+        )
 
 class FakeReviewer:
     def __init__(self, approved: bool = True) -> None:
@@ -70,6 +78,25 @@ def make_scene_request() -> AgentRequest:
         ),
     )
 
+def make_temporal_request() -> AgentRequest:
+    return AgentRequest(
+        task=AgentTask.TEMPORAL_SCENE_NARRATION,
+        user_message="Describe the recorded changes.",
+        temporal_observations=(
+            TemporalObservation(
+                patient_id="P001",
+                observation_type="respiratory_rate",
+                value="20",
+                observed_at_seconds=0,
+            ),
+            TemporalObservation(
+                patient_id="P001",
+                observation_type="respiratory_rate",
+                value="24",
+                observed_at_seconds=60,
+            ),
+        ),
+    )
 
 def test_patient_dialogue_request_requires_disclosure_packet():
     with pytest.raises(ValidationError, match="requires a disclosure packet"):
@@ -165,3 +192,43 @@ def test_orchestrator_rejects_mismatched_agent_task():
 
     with pytest.raises(ValueError, match="does not match"):
         asyncio.run(orchestrator.handle(make_patient_request()))
+def test_orchestrator_routes_temporal_scene_narration():
+    reviewer = FakeReviewer(approved=True)
+    orchestrator = AgentOrchestrator(
+        patient_agent=FakePatientAgent(),
+        scene_agent=FakeSceneAgent(),
+        temporal_scene_agent=FakeTemporalSceneAgent(),
+        safety_reviewer=reviewer,
+    )
+
+    response = asyncio.run(orchestrator.handle(make_temporal_request()))
+
+    assert response.agent_name == "fake_temporal_scene"
+    assert response.task == AgentTask.TEMPORAL_SCENE_NARRATION
+
+
+def test_orchestrator_rejects_temporal_request_when_agent_not_configured():
+    orchestrator = AgentOrchestrator(
+        patient_agent=FakePatientAgent(),
+        scene_agent=FakeSceneAgent(),
+        safety_reviewer=FakeReviewer(),
+    )
+
+    with pytest.raises(ValueError, match="not configured"):
+        asyncio.run(orchestrator.handle(make_temporal_request()))
+
+
+def test_orchestrator_applies_safety_review_to_temporal_output():
+    orchestrator = AgentOrchestrator(
+        patient_agent=FakePatientAgent(),
+        scene_agent=FakeSceneAgent(),
+        temporal_scene_agent=FakeTemporalSceneAgent(),
+        safety_reviewer=FakeReviewer(approved=False),
+        rejection_message="Temporal output blocked.",
+    )
+
+    response = asyncio.run(orchestrator.handle(make_temporal_request()))
+
+    assert response.agent_name == "safety_reviewer"
+    assert response.task == AgentTask.TEMPORAL_SCENE_NARRATION
+    assert response.content == "Temporal output blocked."
